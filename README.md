@@ -5,8 +5,8 @@
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-FFDD00.svg?style=flat-square&logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/mariantomay)
 
-> **Moderní retro herní pracovní stanice a správce DOSBoxu pro macOS.**  
-> 100% přímé spouštění DOS her, chytrý Drive Bay, podpora Sound Blasteru 16 / Roland MT-32 a ochrana herních pozic bez nutnosti psaní příkazů do terminálu.
+> **Modern retro gaming workstation and deterministic DOSBox manager engineered specifically for macOS.**  
+> 100% direct 1-click launch, intelligent Virtual Drive Bay, authentic Sound Blaster 16 & Roland MT-32 synthesis, and bulletproof save state protection — zero terminal required.
 
 ---
 
@@ -14,78 +14,78 @@
 
 ---
 
-## 🌟 Klíčové vlastnosti / Key Features
+## 🌟 Key Features
 
-- **⚡ 1-Click Přímé spouštění (Zero Terminal):** Konec ručního psaní `mount c ~/games/...` a ladění parametrů v terminálu. Dvojklik a hra se spustí v optimalizovaném prostředí.
-- **💿 Virtuální Drive Bay:** Okamžité připojování ISO, CUE/BIN, DMG, IMG disket i lokálních složek Macu jako virtuálních DOS mechanik `C:\` a `D:\`.
-- **🎛️ Hardwarový subsystém:**
-  - Yamaha OPL3 FM syntéza (Sound Blaster 16)
-  - Gravis UltraSound (GUS)
-  - Roland MT-32 MIDI bridge přes macOS CoreAudio
-  - PC Speaker emulace
-- **🔒 Save Vault & Checkpointy:** Inteligentní sandboxové zálohování a rekurzivní správa složek zabraňující přepsání nebo ztrátě herních pozic při přeinstalacích.
-- **📺 VGA Scaler Engine:** Režimy `normal2x`, `normal3x`, `advmame2x`, `hq2x` a automatická korekce poměru stran 4:3 pro moderní Retina a UltraWide displeje.
-- **🌐 FreeDOS 1.4 Katalog:** 35 legálních, licenčně ověřených open-source balíčků s automatickou kontrolou kontrolních součtů CRC32.
-- **🦀 Rust & Tauri v2 Core:** Bleskový start, minimální spotřeba paměti RAM a nativní binárka pro Apple Silicon (M1/M2/M3/M4) i procesory Intel.
-
----
-
-## 🤝 Vítáme podporu a zapojení do vývoje! / Community & Contributions
-
-Projekt **GameSky.space** je vyvíjen jako otevřený open-source nástroj pro všechny milovníky retro her na platformě Mac. **Velmi vítáme pomoc a nápady od komunity!**
-
-Jak se můžete zapojit:
-1. 🐛 **Hlášení chyb a nápadů:** Vytvořte [GitHub Issue](https://github.com/bradacz/gamesky.space/issues) s popisem chyby nebo návrhem nové funkce.
-2. 🎮 **Testování herních profilů:** Pomozte nám otestovat a vyladit optimální cykly CPU pro vaše oblíbené DOS klasiky.
-3. 💻 **Pull Requesty:** Vylepšení frontendového rozhraní, Rust backendu nebo zvukových profilů jsou srdečně vítána!
-4. ☕ **Podpora vývoje:** Líbí se vám GameSky? Můžete autora pozvat na kávu přes [Buy Me A Coffee](https://www.buymeacoffee.com/mariantomay).
+- **⚡ 1-Click Direct Launch (Zero Terminal):** Say goodbye to manually typing `mount c ~/games/...` and wrestling with arcane EMS/XMS command-line parameters. Double-click and play with automated environment initialization.
+- **💿 Virtual Drive Bay:** Instant mounting for ISO, CUE/BIN, DMG, IMG floppies, and local macOS folders as virtual DOS drives `C:\` and `D:\`. Multi-disc swap support without touching a configuration file.
+- **🎛️ Complete Sound Hardware Subsystem:**
+  - Yamaha OPL3 FM synthesis (Sound Blaster 16 & Pro)
+  - Gravis UltraSound (GUS) hardware emulation
+  - Roland MT-32 / General MIDI bridge via macOS CoreAudio
+  - PC Speaker simulation
+- **🔒 Save Vault & Sandbox Checkpoints:** Recursive folder scanning and isolated backups prevent your hard-earned progress and game saves from being overwritten during reinstalls.
+- **📺 VGA Scaler Engine:** Built-in presets for `normal2x`, `normal3x`, `advmame2x`, `hq2x`, and 4:3 aspect-ratio correction optimized for high-DPI Retina and UltraWide displays.
+- **🌐 FreeDOS 1.4 Catalog:** 35 legal, license-verified open-source packages with automated CRC32 checksum verification.
+- **🦀 Rust & Tauri v2 Core:** Instant application boot, near-zero RAM footprint, and 100% native execution on Apple Silicon (M1/M2/M3/M4) and Intel Macs.
 
 ---
 
-## 🚀 Vývojové spuštění / Development Setup
+## 🤝 Community & Development Support Welcome!
 
-### Požadavky / Prerequisites
-- Node.js 18+ a `npm`
-- Rust 1.75+ a `cargo`
+**GameSky.space** is built as an open-source tool for retro computing enthusiasts on Mac. **We warmly welcome contributions, testing, and feedback from the community!**
+
+### How You Can Help:
+1. 🐛 **Report Issues & Feature Requests:** Open a [GitHub Issue](https://github.com/bradacz/gamesky.space/issues) to report bugs, suggest enhancements, or propose new emulator features.
+2. 🎮 **Game Profile Compatibility:** Test your favorite DOS classics and share optimal CPU cycles and sound configurations.
+3. 💻 **Pull Requests:** Contributions to the React frontend, Tauri/Rust backend, sound engines, or documentation are very welcome!
+4. ☕ **Support the Developer:** If you enjoy GameSky.space, consider buying the creator a coffee at [Buy Me A Coffee](https://www.buymeacoffee.com/mariantomay).
+
+---
+
+## 🚀 Development Setup
+
+### Prerequisites
+- Node.js 18+ and `npm`
+- Rust 1.75+ and `cargo`
 - macOS 11.0+ (Big Sur, Monterey, Ventura, Sonoma, Sequoia)
 
-### Instalace a start / Installation & Run
+### Installation & Quick Start
 
 ```bash
-# 1. Klonování repozitáře
+# 1. Clone the repository
 git clone https://github.com/bradacz/gamesky.space.git
 cd gamesky.space
 
-# 2. Instalace závislostí
+# 2. Install dependencies
 npm install
 
-# 3. Spuštění vývojového webu (Vite)
+# 3. Start the web frontend in development mode
 npm run dev
 
-# 4. Spuštění plné nativní desktopové aplikace (Tauri v2 + Rust)
+# 4. Launch the full native macOS application (Tauri v2 + Rust)
 npm run tauri dev
 ```
 
 ---
 
-## 🛠️ Sestavení a testy / Build & Checks
+## 🛠️ Build & Verification
 
 ```bash
-# Kontrola TypeScriptu a sestavení webových assetů
+# Verify TypeScript types and bundle frontend assets
 npm run build
 
-# Testy Rust jádra
+# Run Rust backend test suite
 cargo test --manifest-path src-tauri/Cargo.toml
 
-# Linter Rustu
+# Run Rust clippy linter with strict checks
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ```
 
 ---
 
-## 📦 Podepsaný macOS Release (DMG)
+## 📦 Signed macOS Distribution (DMG)
 
-Release skript vytváří Universal macOS aplikaci a DMG pro Apple Silicon i Intel s podpisem Developer ID:
+The release script packages a Universal macOS binary (Apple Silicon + Intel) with Developer ID code signing, Apple notarization submission, and Gatekeeper verification:
 
 ```bash
 npm run release:macos
@@ -93,11 +93,11 @@ npm run release:macos
 
 ---
 
-## 📄 Licence / License
+## 📄 License & Legal Notice
 
-Tento projekt je licencován pod **[MIT Licencí](LICENSE)**.  
-Emulační vrstva využívá a spolupracuje s open-source projekty **DOSBox**, **DOSBox-Staging** a **DOSBox-X** (licencováno pod GNU GPLv2). Všechny názvy her a registrované ochranné známky náleží jejich původním vlastníkům.
+This project is licensed under the **[MIT License](LICENSE)**.  
+The underlying emulation runtime interfaces with open-source binaries and configurations from **DOSBox**, **DOSBox-Staging**, and **DOSBox-X** (licensed under GNU GPLv2). All original game titles, cover artwork, and trademarks belong to their respective copyright holders.
 
 ---
 
-© 1995–2026 **GameSky.space** · Vyvinuto s ❤️ v Rustu a Reactu pro macOS.
+© 1995–2026 **GameSky.space** · Engineered with ❤️ in Rust & React for macOS.
