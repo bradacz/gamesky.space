@@ -255,31 +255,88 @@ body {
   text-decoration: none;
   position: relative;
   z-index: 2;
+  background: rgba(4, 9, 20, 0.78);
+  border: 2px solid #ffffff;
+  box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.75), 0 0 16px rgba(255, 230, 0, 0.25);
+  padding: 6px 16px 6px 8px;
+  border-radius: 6px;
+  backdrop-filter: blur(8px);
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+
+.navbar-brand-badge:hover {
+  transform: translate(-2px, -2px);
+  border-color: var(--cmyk-yellow);
+  box-shadow: 6px 6px 0px rgba(0, 0, 0, 0.9), 0 0 24px rgba(255, 230, 0, 0.5);
+}
+
+.brand-icon-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .brand-logo-img {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 6px;
-  border: 2px solid #ffffff;
-  box-shadow: 3px 3px 0px rgba(0,0,0,0.5);
+  border: 2px solid var(--cmyk-yellow);
+  box-shadow: 2px 2px 0px #000000;
   object-fit: contain;
-  background: #ffffff;
+  background: #000000;
   display: block;
+  image-rendering: pixelated;
+  transition: transform 0.2s;
+}
+
+.navbar-brand-badge:hover .brand-logo-img {
+  transform: scale(1.06) rotate(-2deg);
+}
+
+.brand-text-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 
 .brand-logo-text {
   font-family: var(--font-headline);
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 900;
   color: #ffffff;
-  letter-spacing: -0.5px;
-  text-shadow: 2px 2px 0px #000000;
+  letter-spacing: 0.2px;
+  line-height: 1.1;
+  text-shadow: 2px 2px 0px #000000, 3px 3px 0px rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
 }
 
-.brand-logo-text span {
-  color: var(--cmyk-yellow);
-  text-shadow: 2px 2px 0px #000000;
+.brand-tld-pill {
+  background: var(--cmyk-yellow);
+  color: #000000;
+  font-family: var(--font-headline);
+  font-size: 15px;
+  font-weight: 900;
+  padding: 1px 7px;
+  border-radius: 3px;
+  margin-left: 5px;
+  border: 1px solid #000000;
+  box-shadow: 2px 2px 0px #000000;
+  text-shadow: none;
+  display: inline-block;
+  line-height: 1.2;
+}
+
+.brand-subline-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 900;
+  color: var(--cmyk-cyan);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-shadow: 1px 1px 0px #000000;
 }
 
 .navbar-links {

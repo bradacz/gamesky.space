@@ -254,8 +254,15 @@ export const App: React.FC = () => {
         <NavbarSkyArt />
 
         <a href="#hero" className="navbar-brand-badge">
-          <img src="/app-icon.png" alt="GameSky Logo" className="brand-logo-img" />
-          <div className="brand-logo-text">GameSky<span>.space</span></div>
+          <div className="brand-icon-wrapper">
+            <img src="/app-icon.png" alt="GameSky Logo" className="brand-logo-img" />
+          </div>
+          <div className="brand-text-block">
+            <div className="brand-logo-text">
+              GameSky<span className="brand-tld-pill">.space</span>
+            </div>
+            <div className="brand-subline-badge">RETRO DOS WORKSTATION</div>
+          </div>
         </a>
 
         <div className="navbar-links">
