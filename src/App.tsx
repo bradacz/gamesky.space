@@ -513,7 +513,17 @@ export const App: React.FC = () => {
 
           <h2 className="coupon-headline">
             <span>{t.downloadHeadlinePre}</span>
-            <span className="headline-brand-pill">GameSky.space</span>
+            <div className="navbar-brand-badge coupon-brand-badge">
+              <div className="brand-icon-wrapper">
+                <img src="/app-icon.png" alt="GameSky Logo" className="brand-logo-img" />
+              </div>
+              <div className="brand-text-block">
+                <div className="brand-logo-text">
+                  GameSky<span className="brand-tld-pill">.space</span>
+                </div>
+                <div className="brand-subline-badge">RETRO DOS WORKSTATION</div>
+              </div>
+            </div>
             <span>{t.downloadHeadlinePost}</span>
           </h2>
 

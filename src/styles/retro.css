@@ -1196,19 +1196,23 @@ body {
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 16px;
 }
 
-.headline-brand-pill {
-  background: var(--ink-black);
-  color: var(--cmyk-yellow);
-  padding: 4px 18px;
-  border-radius: 4px;
-  box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.25);
-  letter-spacing: 0.5px;
-  font-family: var(--font-headline);
-  font-size: 36px;
-  display: inline-block;
+.coupon-brand-badge {
+  display: inline-flex;
+  vertical-align: middle;
+  background: #060b19;
+  border: 2px solid var(--ink-black);
+  box-shadow: 4px 4px 0px var(--ink-black);
+  text-transform: none;
+  cursor: default;
+  transform: none;
+}
+
+.coupon-brand-badge:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0px var(--ink-black);
 }
 
 .coupon-subtitle {
