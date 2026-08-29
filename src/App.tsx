@@ -16,8 +16,10 @@ const I18N = {
     navHardware: 'Strana 2: Hardware lab',
     navDownload: 'Strana 3: Stažení',
     btnNavDownload: 'Stažení DMG',
+    btnNavDiscussions: 'Diskuse',
     btnBmcNav: 'Koupit kávu',
     btnBmcHero: 'Pozvat na kávu',
+    btnHeroDiscussions: 'Diskusní fórum',
     bmcInfoTitle: 'Líbí se vám GameSky.space?',
     bmcInfoDesc: 'GameSky je vyvíjen jako bezplatný open-source projekt. Můžete podpořit další vývoj a nové funkce pozváním na kávu.',
     btnBmcCard: 'Buy me a coffee',
@@ -80,6 +82,7 @@ const I18N = {
     footerBlock3Title: '⚖️ Info',
     footerGdpr: 'GDPR, Cookies & Hosting',
     footerLicenseLink: 'Licence MIT & GPLv2',
+    footerDiscussions: 'Diskuse #1',
     footerLicenseNote: 'GameSky.space je nezávislý open-source software publikovaný pod licencí MIT. Emulační jádro spolupracuje s DOSBox, DOSBox-Staging a DOSBox-X (GPLv2). Všechny registrované ochranné známky a názvy her náleží jejich původním vlastníkům.',
     footerCopy: 'GameSky.space © 1995–2026. Vyvinuto v Rustu a Tauri v2 pro macOS.',
     gdprTitle: 'ZÁSADY OCHRANY SOUKROMÍ, COOKIES & HOSTING',
@@ -100,8 +103,10 @@ const I18N = {
     navHardware: 'Page 2: Hardware Lab',
     navDownload: 'Page 3: Download',
     btnNavDownload: 'Download DMG',
+    btnNavDiscussions: 'Discussions',
     btnBmcNav: 'Buy a coffee',
     btnBmcHero: 'Buy me a coffee',
+    btnHeroDiscussions: 'Discussion Forum',
     bmcInfoTitle: 'Enjoying GameSky.space?',
     bmcInfoDesc: 'GameSky is developed as a free open-source tool. You can support continued development by buying me a coffee.',
     btnBmcCard: 'Buy me a coffee',
@@ -164,6 +169,7 @@ const I18N = {
     footerBlock3Title: '⚖️ Info',
     footerGdpr: 'GDPR, Cookies & Hosting',
     footerLicenseLink: 'MIT & GPLv2 License',
+    footerDiscussions: 'Discussion #1',
     footerLicenseNote: 'GameSky.space is independent open-source software released under the MIT License. The emulation runtime integrates with DOSBox, DOSBox-Staging, and DOSBox-X (GPLv2). All registered trademarks and game titles belong to their respective copyright holders.',
     footerCopy: 'GameSky.space © 1995–2026. Built with Rust and Tauri v2 for macOS.',
     gdprTitle: 'PRIVACY POLICY, COOKIES & HOSTING NOTICE',
@@ -294,6 +300,18 @@ export const App: React.FC = () => {
               <span>GitHub</span>
             </a>
 
+            {/* GitHub Discussions Nav Button */}
+            <a
+              href="https://github.com/bradacz/gamesky.space/discussions/1"
+              target="_blank"
+              rel="noreferrer"
+              className="btn-nav-discussions"
+              title="GitHub Discussions"
+            >
+              <span>💬</span>
+              <span>{t.btnNavDiscussions}</span>
+            </a>
+
             <a href="#download" className="btn-nav-tearoff">
               <span>💾</span>
               <span>{t.btnNavDownload}</span>
@@ -334,6 +352,16 @@ export const App: React.FC = () => {
               <span>🎵</span>
               <span>{t.btnHeroSound}</span>
             </button>
+            <a
+              href="https://github.com/bradacz/gamesky.space/discussions/1"
+              target="_blank"
+              rel="noreferrer"
+              className="btn-editorial-discussions"
+              title="GitHub Discussions"
+            >
+              <span>💬</span>
+              <span>{t.btnHeroDiscussions}</span>
+            </a>
             <a
               href="https://www.buymeacoffee.com/mariantomay"
               target="_blank"
@@ -681,6 +709,15 @@ export const App: React.FC = () => {
                 >
                   <span>🐙</span>
                   <span>GitHub</span>
+                </a>
+                <a
+                  href="https://github.com/bradacz/gamesky.space/discussions/1"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="footer-chip-link"
+                >
+                  <span>💬</span>
+                  <span>{t.footerDiscussions}</span>
                 </a>
               </div>
             </div>

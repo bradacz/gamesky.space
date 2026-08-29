@@ -425,6 +425,29 @@ body {
   box-shadow: 5px 5px 0px var(--ink-black);
 }
 
+.btn-nav-discussions {
+  background: #e0f2fe;
+  color: var(--ink-black);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 8px 14px;
+  border: 2px solid var(--ink-black);
+  box-shadow: 3px 3px 0px var(--ink-black);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: transform 0.1s, box-shadow 0.1s, background 0.1s;
+  border-radius: 4px;
+}
+
+.btn-nav-discussions:hover {
+  background: var(--cmyk-cyan);
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0px var(--ink-black);
+}
+
 .btn-nav-tearoff {
   background: var(--cmyk-red);
   color: #ffffff;
@@ -602,6 +625,29 @@ body {
 
 .btn-editorial-bmc:hover {
   background: #ffea38;
+  transform: translate(-2px, -2px);
+  box-shadow: 7px 7px 0px var(--ink-black);
+}
+
+.btn-editorial-discussions {
+  background: #ffffff;
+  color: var(--ink-black);
+  font-family: var(--font-headline);
+  font-size: 15px;
+  font-weight: 900;
+  padding: 16px 24px;
+  border: var(--border-thick);
+  box-shadow: var(--shadow-hard);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.btn-editorial-discussions:hover {
+  background: var(--cmyk-cyan);
   transform: translate(-2px, -2px);
   box-shadow: 7px 7px 0px var(--ink-black);
 }
