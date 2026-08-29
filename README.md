@@ -83,13 +83,25 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
 ---
 
-## 📦 Signed macOS Distribution (DMG)
+## 📦 Signed macOS Distribution & Auto-Updater Deployment
 
-The release script packages a Universal macOS binary (Apple Silicon + Intel) with Developer ID code signing, Apple notarization submission, and Gatekeeper verification:
+GameSky.space includes an automated release pipeline for Apple Developer ID code signing, Apple Notarization, Minisign updater signing, and automated deployment to Bunny.net CDN:
 
 ```bash
+# 1. Generate updater keys (run once)
+npm run release:keys
+
+# 2. Build signed & notarized macOS DMG locally
 npm run release:macos
+
+# 3. Deploy DMG, updater archives and latest.json to Bunny.net CDN
+npm run release:bunny
+
+# 4. Full All-in-One Release & Deploy
+npm run release:deploy
 ```
+
+For detailed setup, environment variables, and step-by-step instructions, see **[RELEASE.md](RELEASE.md)**.
 
 ---
 
