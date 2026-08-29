@@ -10,7 +10,7 @@
 
 ---
 
-![GameSky.space macOS App Screenshot](public/app-screenshot.png)
+![GameSky.space macOS App Screenshot](https://gamesky.space/app-screenshot.png)
 
 ---
 
