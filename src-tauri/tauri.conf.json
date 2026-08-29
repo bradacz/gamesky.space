@@ -1,0 +1,58 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "GameSky.space",
+  "version": "1.0.0",
+  "identifier": "space.gamesky.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "GameSky.space",
+        "url": "app.html",
+        "width": 1200,
+        "height": 900,
+        "minWidth": 980,
+        "minHeight": 760,
+        "resizable": true,
+        "decorations": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://ipc.localhost https://archive.org https://*.archive.org; img-src 'self' asset: http://asset.localhost data: https://archive.org https://*.archive.org https://thumbnails.libretro.com; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/artwork/**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "category": "Game",
+    "shortDescription": "A modern retro DOS game library and launcher",
+    "longDescription": "GameSky.space organizes and launches legally owned DOS games with automatic DOSBox configuration, CD-ROM media support, artwork and save checkpoints.",
+    "copyright": "Copyright © 2026 ma_xx & Brada_cz",
+    "createUpdaterArtifacts": false,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "dmg": {
+        "appPosition": { "x": 180, "y": 190 },
+        "applicationFolderPosition": { "x": 480, "y": 190 },
+        "windowSize": { "width": 660, "height": 400 }
+      }
+    }
+  }
+}

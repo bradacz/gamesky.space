@@ -1,0 +1,35 @@
+#!/bin/zsh
+set -euo pipefail
+
+project_dir=${0:A:h:h}
+cd "$project_dir"
+
+fail() {
+  print -u2 "GameSky.space release check failed: $1"
+  exit 1
+}
+
+rustup target list --installed | grep -qx 'aarch64-apple-darwin' || fail 'Apple Silicon Rust target is missing.'
+rustup target list --installed | grep -qx 'x86_64-apple-darwin' || fail 'Intel Rust target is missing.'
+security find-identity -v -p codesigning | grep -q 'Developer ID Application' || fail 'No valid Developer ID Application identity is available in Keychain.'
+[[ -n ${TAURI_SIGNING_PRIVATE_KEY:-} ]] || fail 'TAURI_SIGNING_PRIVATE_KEY is not configured.'
+[[ -n ${GAMESKY_UPDATER_PUBKEY:-} ]] || fail 'GAMESKY_UPDATER_PUBKEY is not configured.'
+
+if [[ -z ${APPLE_API_ISSUER:-} || -z ${APPLE_API_KEY:-} || -z ${APPLE_API_KEY_PATH:-} ]]; then
+  [[ -n ${APPLE_ID:-} && -n ${APPLE_PASSWORD:-} && -n ${APPLE_TEAM_ID:-} ]] \
+    || fail 'Configure either App Store Connect API credentials or APPLE_ID/APPLE_PASSWORD/APPLE_TEAM_ID for notarization.'
+fi
+
+print 'Building signed and notarized Universal GameSky.space application…'
+release_config=$(mktemp "${TMPDIR:-/tmp}/gamesky-tauri-release.XXXXXX.json")
+trap 'rm -f "$release_config"' EXIT
+GAMESKY_RELEASE_CONFIG_PATH="$release_config" node "$project_dir/scripts/generate-tauri-release-config.mjs"
+npm run tauri build -- --config "$release_config" --target universal-apple-darwin --bundles app,dmg
+
+app_path="$project_dir/src-tauri/target/universal-apple-darwin/release/bundle/macos/GameSky.space.app"
+dmg_candidates=("$project_dir"/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg(N))
+(( ${#dmg_candidates[@]} == 1 )) || fail 'Expected exactly one Universal DMG artifact.'
+dmg_path=$dmg_candidates[1]
+"$project_dir/scripts/verify-macos-release.sh" "$app_path" "$dmg_path"
+
+print "Release ready: $dmg_path"

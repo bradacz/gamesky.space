@@ -1,0 +1,30 @@
+{
+  "name": "gamesky-space",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "audit:archive": "node scripts/audit-archive-urls.mjs",
+    "release:macos": "./scripts/build-macos-release.sh",
+    "release:verify": "./scripts/verify-macos-release.sh",
+    "release:manifest": "node scripts/generate-update-manifest.mjs",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-dialog": "^2.0.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^4.7.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0"
+  }
+}

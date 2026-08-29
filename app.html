@@ -1,0 +1,686 @@
+<!DOCTYPE html><html lang="en"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GameSky.space</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <script type="module" src="/src/main.ts"></script>
+    <link rel="stylesheet" href="/src/style.css">
+  </head>
+  <body>
+    <div id="app">
+      <div class="main-window win-outset">
+        
+        <!-- TITLE BAR -->
+        <div class="title-bar">
+          <div class="title-text">
+            <span class="title-icon" aria-hidden="true">GS</span>
+            <span class="brand-copy">
+              <strong>GameSky.space</strong>
+              <small>DOS GAME LIBRARY</small>
+            </span>
+          </div>
+          <div class="title-controls">
+            <button class="title-btn" id="btnWinMinimize">_</button>
+            <button class="title-btn" id="btnWinMaximize">□</button>
+            <button class="title-btn" id="btnWinClose">✕</button>
+          </div>
+        </div>
+
+        <!-- MENU BAR -->
+        <div class="menu-bar">
+          <div class="menu-item" id="menuFile"><u>L</u>ibrary</div>
+          <div class="menu-item" id="menuEdit"><u>I</u>mport</div>
+          <div class="menu-item" id="menuDrives"><u>M</u>edia</div>
+          <div class="menu-item" id="menuView"><u>V</u>iew</div>
+          <div class="menu-item" id="menuSettings"><u>S</u>ettings</div>
+          <div class="menu-item" id="menuHelp"><u>H</u>elp</div>
+        </div>
+
+        <!-- 90s TOOLBAR -->
+        <div class="toolbar">
+          <button class="btn-3d toolbar-btn toolbar-btn-wide" id="tbNewGame" title="Add a real game from disk"><b>[+]</b> <span>ADD GAME</span></button>
+          <button class="btn-3d toolbar-btn toolbar-btn-wide" id="tbOpenPresets" title="Load a real DOS game from HDD or flash drive"><b>[A:]</b> <span>FROM DISK</span></button>
+          <button class="btn-3d toolbar-btn toolbar-btn-wide toolbar-primary" id="tbOnlineArchive" title="Browse downloadable DOS games"><b>[@]</b> <span>CATALOG</span></button>
+          <button class="btn-3d toolbar-btn toolbar-btn-wide" id="tbGameSaves" title="Game Saves &amp; Checkpoints Vault"><b>[S]</b> <span>SAVES</span></button>
+          <button class="btn-3d toolbar-btn" id="tbSaveLibrary" title="Export a portable GameSky.space backup">EX</button>
+          <button class="btn-3d toolbar-btn" id="tbImportLibrary" title="Import a portable GameSky.space backup">IM</button>
+          <div class="toolbar-sep"></div>
+          <button class="btn-3d toolbar-btn" id="tbDuplicateGame" title="Duplicate Game Profile">CP</button>
+          <button class="btn-3d toolbar-btn" id="tbDeleteGame" title="Delete Game Profile">DEL</button>
+          <div class="toolbar-sep"></div>
+          <button class="btn-3d toolbar-btn" id="tbThemeToggle" title="Switch Theme (Win95 / Norton / DOS Matrix)">PAL</button>
+          <button class="btn-3d toolbar-btn" id="tbSoundToggle" title="Audio Sound Effects ON/OFF">SND</button>
+          <button class="btn-3d toolbar-btn" id="tbToggleFullscreen" title="Toggle App Fullscreen (F11 / Cmd+Ctrl+F)">FS</button>
+          <button class="btn-3d toolbar-btn" id="tbConfig" title="Global DOSBox Settings">CFG</button>
+          <button class="btn-3d toolbar-btn" id="tbHelp" title="Help / About">?</button>
+        </div>
+
+        <!-- MAIN 3-COLUMN WORKSPACE WITH DRAGGABLE RESIZERS -->
+        <div class="workspace-container" id="workspaceContainer">
+          
+          <!-- LEFT COLUMN: FOLDER & DENSE GAME LIST -->
+          <div class="left-panel win-outset" id="panelLeft">
+            <div class="folder-bar">
+              <span>A:\ MY GAMES</span>
+              <select id="libraryViewSelect" class="retro-dropdown" aria-label="Library view">
+                <option value="all">ALL GAMES</option>
+                <option value="favorites">FAVORITES</option>
+                <option value="recent">RECENTLY PLAYED</option>
+                <option value="needs-attention">NEEDS ATTENTION</option>
+              </select>
+              <input type="text" id="folderFilterInput" class="folder-input" value="" placeholder="Search library…">
+            </div>
+
+            <div class="game-list-box win-inset" id="gameListBox">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+
+          <!-- RESIZER 1 -->
+          <div class="col-resizer" id="resizerLeft" title="Drag to resize left column"></div>
+
+          <!-- CENTER COLUMN: DEEP BLUE SHOWCASE & COVER -->
+          <div class="center-showcase-panel win-inset" id="panelCenter">
+            <div class="center-cover-frame" id="centerCoverFrame">
+              <img class="center-cover-img" id="centerCoverImage" alt="" hidden="">
+              <div class="center-cover-placeholder" id="centerCoverPlaceholder">DOS</div>
+            </div>
+
+            <div class="center-info-block">
+              <div class="center-game-title" id="centerTitle">NO GAME SELECTED</div>
+              <div class="center-game-path" id="centerPath">Install from Catalog or load from disk</div>
+              <div class="center-game-dev" id="centerDev">Developer: -</div>
+              <div class="center-game-status" id="centerStatus">Status: Idle</div>
+              <div id="centerGenre" style="font-size:13px; opacity:0.85; margin-top:1px;">Only real local installations are shown</div>
+              <div class="game-detail-actions">
+                <button class="btn-3d" id="btnToggleFavorite">☆ FAVORITE</button>
+                <button class="btn-3d" id="btnDiagnoseGame">✓ CHECK GAME</button>
+                <button class="btn-3d" id="btnGameControls">⌨ CONTROLS</button>
+                <button class="btn-3d" id="btnOpenGameSaves">💾 SAVES</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- RESIZER 2 -->
+          <div class="col-resizer" id="resizerRight" title="Drag to resize right column"></div>
+
+          <!-- RIGHT COLUMN: DRIVES, SETTINGS & BIG RED RUN BUTTON -->
+          <div class="right-panel" id="panelRight">
+            
+            <!-- PANEL: DRIVES & MEDIA -->
+            <div class="panel-group win-outset">
+              <div class="panel-group-title">
+                <span>[ DRIVES &amp; MEDIA ]</span>
+              </div>
+
+              <!-- Floppy A: -->
+              <div class="drive-row win-inset">
+                <div class="drive-label">
+                  <span>💾 Floppy A:</span>
+                </div>
+                <div class="drive-path-text" id="floppyDisplay">[None]</div>
+                <button class="btn-3d" id="btnFloppyBrowse" style="font-size:12px; padding:1px 4px">Browse</button>
+                <button class="btn-3d" id="btnFloppyEject" style="font-size:12px; padding:1px 4px">Eject</button>
+              </div>
+
+              <!-- CD-ROM D: -->
+              <div class="drive-row win-inset">
+                <div class="drive-label">
+                  <span>💿 CD-ROM D:</span>
+                </div>
+                <div class="drive-path-text" id="cdRomDisplay">[None]</div>
+                <button class="btn-3d" id="btnCdBrowse" style="font-size:12px; padding:1px 4px" title="Select ISO, CUE, BIN, IMG, or NRG image">Image</button>
+                <button class="btn-3d" id="btnCdBrowseFolder" style="font-size:12px; padding:1px 4px" title="Select a mounted physical CD or folder">Disc/Folder</button>
+                <button class="btn-3d" id="btnCdEject" style="font-size:12px; padding:1px 4px">Eject</button>
+              </div>
+            </div>
+
+            <!-- PANEL: DOSBOX EMULATION SETTINGS -->
+            <div class="panel-group win-outset settings-panel">
+              <div class="panel-group-title">
+                <span>[ DOSBOX CONFIG ]</span>
+              </div>
+
+              <!-- CPU Cycles Slider -->
+              <div class="settings-row">
+                <div class="settings-header-line">
+                  <span>CPU Cycles Slider:</span>
+                  <span id="cyclesValueDisplay" style="color:var(--win-blue); font-weight:bold">15000 cycles</span>
+                </div>
+                <input type="range" id="cyclesRange" min="500" max="60000" step="500" value="15000">
+                <div style="display:flex; justify-content:space-between; font-size:11px; color:#555">
+                  <span>8088 (1k)</span>
+                  <span>386 (8k)</span>
+                  <span>486 (25k)</span>
+                  <span>Pentium (40k)</span>
+                  <span>Max</span>
+                </div>
+              </div>
+
+              <!-- Fullscreen Switch -->
+              <div class="settings-row" style="margin-top:4px; padding:3px 6px; background:#e0ded8; border:1px solid #999; display:flex; justify-content:space-between; align-items:center;">
+                <label style="display:flex; align-items:center; gap:6px; font-weight:bold; cursor:pointer; font-size:13px;">
+                  <input type="checkbox" id="chkFullscreenGame" style="cursor:pointer;">
+                  <span>🖥️ Launch in Fullscreen Mode</span>
+                </label>
+                <span style="font-size:11px; color:#555">Alt+Enter in-game</span>
+              </div>
+
+              <!-- Graphics Scaler -->
+              <div class="settings-row" style="margin-top:2px">
+                <div class="settings-header-line">
+                  <span>Graphics Machine &amp; Scaler:</span>
+                </div>
+                <div style="display:flex; gap:3px">
+                  <select id="selMachine" class="retro-dropdown" style="flex:1">
+                    <option value="svga_s3">SVGA (640x480 S3)</option>
+                    <option value="vga">VGA (320x200 Standard)</option>
+                    <option value="ega">EGA (16 Colors)</option>
+                    <option value="cga">CGA (4 Colors)</option>
+                    <option value="tandy">Tandy 1000</option>
+                  </select>
+                  <select id="selScaler" class="retro-dropdown" style="flex:1">
+                    <option value="normal2x">Scaler: Normal2x</option>
+                    <option value="normal3x">Scaler: Normal3x</option>
+                    <option value="advmame2x">Scaler: AdvMAME2x</option>
+                    <option value="hq2x">Scaler: HQ2x</option>
+                    <option value="none">Scaler: None (1x)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Sound Device -->
+              <div class="settings-row" style="margin-top:2px">
+                <div class="settings-header-line">
+                  <span>Sound Device:</span>
+                </div>
+                <select id="selSoundCard" class="retro-dropdown">
+                  <option value="sb16">SoundBlaster 16</option>
+                  <option value="sbpro2">SoundBlaster Pro 2</option>
+                  <option value="sb2">SoundBlaster 2.0</option>
+                  <option value="none">No Sound Device</option>
+                </select>
+                <div class="sound-specs-line win-inset">
+                  <span>Port: <select id="selPort" style="font-family:inherit"><option value="220">220</option><option value="240">240</option></select></span>
+                  <span>IRQ: <select id="selIrq" style="font-family:inherit"><option value="7">7</option><option value="5">5</option></select></span>
+                  <span>DMA: <select id="selDma" style="font-family:inherit"><option value="1">1</option><option value="3">3</option></select></span>
+                  <span>MIDI: <input type="checkbox" id="chkMidi" checked=""></span>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- BIG 3D DOWNLOAD MANAGER & CATALOG BUTTON -->
+            <div class="catalog-btn-container">
+              <button class="btn-catalog-dos" id="btnBigCatalog">
+                <span style="font-size:18px;">🌐</span>
+                <span>BROWSE GAME CATALOG</span>
+              </button>
+            </div>
+
+            <!-- BIG RED RUN BUTTON -->
+            <div class="run-btn-container">
+              <button class="btn-run-dos" id="btnRunDosGame">
+                <span class="pixel-play-icon"></span>
+                <span>RUN GAME</span>
+              </button>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- FUNCTION KEY STRIP — functional 90s command bar -->
+        <div class="function-key-strip" aria-label="Keyboard shortcuts">
+          <button class="function-key" data-target="tbHelp"><kbd>F1</kbd><span>HELP</span></button>
+          <button class="function-key" data-target="tbNewGame"><kbd>F2</kbd><span>ADD</span></button>
+          <button class="function-key" data-target="tbOnlineArchive"><kbd>F3</kbd><span>CATALOG</span></button>
+          <button class="function-key" data-target="tbOpenPresets"><kbd>F4</kbd><span>IMPORT</span></button>
+          <button class="function-key" data-target="tbGameSaves"><kbd>F5</kbd><span>SAVES</span></button>
+          <button class="function-key" data-target="tbDeleteGame"><kbd>F8</kbd><span>REMOVE</span></button>
+          <button class="function-key" data-target="btnRunDosGame"><kbd>F9</kbd><span>RUN</span></button>
+          <button class="function-key" data-target="tbConfig"><kbd>F10</kbd><span>SETUP</span></button>
+        </div>
+
+        <!-- BOTTOM STATUS BAR -->
+        <div class="bottom-status-bar">
+          <div class="status-segment main-info" id="sbSelectedText">No Game Selected</div>
+          <div class="status-segment" id="sbCountText">0 Games Found</div>
+          <div class="status-segment" id="sbCpuText">CPU: -</div>
+          <div class="status-segment status-copyright" aria-label="Copyright">© 2026 ma_xx · Brada_cz</div>
+          <div class="status-segment" id="sbClockText">7:42 PM</div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- MODAL: ADD / EDIT GAME -->
+    <div class="modal-overlay" id="modalGameEdit">
+      <div class="modal-box win-outset">
+        <div class="title-bar">
+          <div class="title-text">
+            <span>➕ Game Profile Editor</span>
+          </div>
+          <button class="title-btn" id="btnCancelEditX">✕</button>
+        </div>
+        <div class="modal-content">
+          
+          <div class="field-block">
+            <span class="field-label" style="color:var(--win-blue)">Optional compatibility settings lookup (does not add game files):</span>
+            <input type="text" id="inputPresetSearch" class="folder-input" placeholder="Type a game name to look up recommended DOSBox settings">
+            <div class="game-list-box win-inset" id="presetSuggestionsBox" style="max-height:100px; margin-top:2px"></div>
+          </div>
+
+          <div class="field-grid-2">
+            <div class="field-block">
+              <span class="field-label">Game Title: *</span>
+              <input type="text" id="inputTitle" class="folder-input" placeholder="e.g. DOOM II: Hell on Earth">
+            </div>
+            <div class="field-block">
+              <span class="field-label">Executable File: *</span>
+              <div style="display:flex; gap:3px">
+                <input type="text" id="inputExecutable" class="folder-input" placeholder="e.g. DOOM2.EXE">
+                <button class="btn-3d" id="btnModalBrowseExecutable">Browse</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-grid-2">
+            <div class="field-block">
+              <span class="field-label">Developer / Publisher:</span>
+              <input type="text" id="inputDev" class="folder-input" placeholder="e.g. id Software">
+            </div>
+            <div class="field-block">
+              <span class="field-label">Year &amp; Genre:</span>
+              <input type="text" id="inputYearGenre" class="folder-input" placeholder="e.g. 1994 - Action / FPS">
+            </div>
+          </div>
+
+          <div class="field-block">
+            <span class="field-label">Game Folder on Mac (Mounted as C:\):</span>
+            <div style="display:flex; gap:3px">
+              <input type="text" id="inputFolder" class="folder-input" placeholder="~/DOSGAMES/DOOM2">
+              <button class="btn-3d" id="btnModalBrowseDir">Browse</button>
+            </div>
+          </div>
+
+          <div class="field-block">
+            <span class="field-label">CD-ROM Image or Mounted Disc/Folder:</span>
+            <div style="display:flex; gap:3px">
+              <input type="text" id="inputCdIso" class="folder-input" placeholder="Optional ISO/CUE/BIN or /Volumes/CD-ROM">
+              <button class="btn-3d" id="btnModalBrowseIso">Image</button>
+              <button class="btn-3d" id="btnModalBrowseCdFolder">Disc/Folder</button>
+            </div>
+          </div>
+
+          <div class="field-block">
+            <span class="field-label">Description / Notes:</span>
+            <input type="text" id="inputNotes" class="folder-input" placeholder="Game storyline or notes...">
+          </div>
+
+          <div class="field-block" style="margin-top:4px">
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
+              <input type="checkbox" id="inputFullscreen">
+              <span>🖥️ Start this game in Fullscreen mode by default</span>
+            </label>
+          </div>
+
+        </div>
+        <div class="modal-actions">
+          <button class="btn-3d" id="btnSaveProfile" style="background:#008080; color:#ffffff">💾 Save Game</button>
+          <button class="btn-3d" id="btnCancelProfile">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: SETTINGS & PATHS -->
+    <div class="modal-overlay" id="modalConfig">
+      <div class="modal-box win-outset">
+        <div class="title-bar">
+          <div class="title-text">
+            <span>⚙️ Configuration &amp; Emulator Paths</span>
+          </div>
+          <button class="title-btn" id="btnCancelConfigX">✕</button>
+        </div>
+        <div class="modal-content">
+          <div class="field-block">
+            <span class="field-label">Default Emulator Version:</span>
+            <select id="cfgEmuType" class="retro-dropdown">
+              <option value="dosbox">Standard DOSBox</option>
+              <option value="dosbox-staging">DOSBox-Staging (Recommended)</option>
+              <option value="dosbox-x">DOSBox-X</option>
+            </select>
+          </div>
+
+          <div style="margin: 6px 0;">
+            <button class="btn-3d" id="btnAutoDetectEmus" style="background:#004080; color:#fff; width:100%;">🔍 Auto-Detect DOSBox Installed on Mac</button>
+            <div id="detectedEmusBox" style="font-size:13px; margin-top:4px; padding:4px; background:#fff; border:1px solid #999; display:none;"></div>
+          </div>
+
+          <div class="field-block">
+            <span class="field-label">DOSBox Binary Path on macOS:</span>
+            <div style="display:flex; gap:4px">
+              <input type="text" id="cfgDosboxPath" class="folder-input">
+              <button class="btn-3d" id="btnBrowseDosbox">Browse...</button>
+            </div>
+          </div>
+
+          <div class="field-block">
+            <span class="field-label">DOSBox-Staging Path:</span>
+            <div style="display:flex; gap:4px">
+              <input type="text" id="cfgStagingPath" class="folder-input">
+              <button class="btn-3d" id="btnBrowseStaging">Browse...</button>
+            </div>
+          </div>
+
+          <div class="field-block">
+            <span class="field-label">DOSBox-X Path:</span>
+            <div style="display:flex; gap:4px">
+              <input type="text" id="cfgXPath" class="folder-input">
+              <button class="btn-3d" id="btnBrowseX">Browse...</button>
+            </div>
+          </div>
+
+          <div class="field-block">
+            <span class="field-label">Default Root DOS Folder (C:\):</span>
+            <div style="display:flex; gap:4px">
+              <input type="text" id="cfgDefaultDir" class="folder-input">
+              <button class="btn-3d" id="btnBrowseDefaultDir">Browse...</button>
+            </div>
+          </div>
+
+          <div class="field-block" style="margin-top:2px">
+            <span class="field-label">Visual Theme:</span>
+            <select id="cfgThemeSelect" class="retro-dropdown">
+              <option value="classic-win95">Windows 95 Classic (Teal &amp; Gray)</option>
+              <option value="norton-blue">Norton Commander (Navy Blue &amp; Cyan)</option>
+              <option value="dos-matrix">DOS Green Matrix (Phosphor Dark)</option>
+            </select>
+          </div>
+
+          <div class="field-block" style="margin-top:2px">
+            <label style="font-size:14px; cursor:pointer;">
+              <input type="checkbox" id="cfgAudioEnabled" checked=""> Enable 90s Sound Effects (PC Speaker &amp; Floppy Stepper)
+            </label>
+          </div>
+
+          <div class="field-block" style="margin-top:2px">
+            <label style="font-size:14px; cursor:pointer;">
+              <input type="checkbox" id="cfgCheckUpdates" checked=""> Check for signed GameSky.space updates
+            </label>
+            <div style="display:flex; align-items:center; gap:8px; margin-top:5px">
+              <button class="btn-3d" id="btnCheckUpdates">CHECK NOW</button>
+              <span id="updateStatus" style="font-size:12px">Signed updates from gamesky.space</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-3d" id="btnSaveConfig" style="background:#008080; color:#fff">Save Config</button>
+          <button class="btn-3d" id="btnCloseConfig">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: LAUNCH & CONF PREVIEW -->
+    <div class="modal-overlay" id="modalLaunch">
+      <div class="modal-box win-outset">
+        <div class="title-bar">
+          <div class="title-text">
+            <span>🚀 DOSBox Execution</span>
+          </div>
+          <button class="title-btn" id="btnCancelLaunchX">✕</button>
+        </div>
+        <div class="modal-content">
+          <div id="launchHeaderMsg" style="font-weight:bold; font-size:16px; color:var(--win-blue)"></div>
+          <div class="field-block" style="margin-top:4px">
+            <span class="field-label">macOS Command Executed:</span>
+            <input type="text" id="launchCmdBox" class="folder-input" readonly="">
+          </div>
+          <div class="field-block" style="margin-top:4px">
+            <span class="field-label">Generated dosbox.conf:</span>
+            <pre class="preview-code-dark" id="launchConfBox"></pre>
+          </div>
+        </div>
+        <div class="modal-actions" style="display:flex; gap:6px; justify-content:flex-end;">
+          <button class="btn-3d" id="btnCopyLaunchCmd">📋 Copy Command</button>
+          <button class="btn-3d" id="btnSaveLaunchConf">💾 Save Config</button>
+          <button class="btn-3d" id="btnCloseLaunchModal">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: ONLINE ARCHIVE DOWNLOADER & CATALOG -->
+    <div class="modal-overlay" id="modalArchive">
+      <div class="modal-box win-outset" style="width: 820px; max-width: 95vw;">
+        <div class="title-bar">
+          <div class="title-text">
+            <span>🌐 MS-DOS Games Catalog — Internet Archive + FreeDOS</span>
+          </div>
+          <button class="title-btn" id="btnCancelArchiveX">✕</button>
+        </div>
+        <div class="modal-content" style="max-height: 80vh; padding: 6px 10px;">
+          
+          <!-- TOP SEARCH & SORT BAR -->
+          <div style="display:flex; gap:6px; align-items:center; margin-bottom:6px;">
+            <select id="catalogSourceSelect" class="retro-dropdown" style="font-size:13px; padding:2px 4px;">
+              <option value="all">🌐 All Sources</option>
+              <option value="freedos">🟢 FreeDOS Open Games</option>
+              <option value="internet-archive">🏛️ Internet Archive</option>
+            </select>
+            <div style="flex:1; display:flex; gap:4px">
+              <input type="text" id="archiveSearchInput" class="folder-input" placeholder="🔍 Search Internet Archive and 35 open FreeDOS games...">
+              <button class="btn-3d" id="btnArchiveSearch">Search</button>
+              <button class="btn-3d" id="btnArchiveClear" title="Clear Search">✕</button>
+            </div>
+            <div style="display:flex; align-items:center; gap:4px; font-size:13px;">
+              <span>Sort:</span>
+              <select id="archiveSortSelect" class="retro-dropdown" style="font-size:13px; padding:1px 4px;">
+                <option value="popular">🔥 Most Popular</option>
+                <option value="rating">⭐ Highest Rated</option>
+                <option value="year-desc">📅 Newest Year</option>
+                <option value="year-asc">📅 Oldest Year</option>
+                <option value="title">🔤 Title A-Z</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- CATEGORY GENRE TABS -->
+          <div class="catalog-genre-tabs" id="catalogGenreTabs">
+            <button class="btn-3d genre-tab active" data-category="all">🌟 All Classics</button>
+            <button class="btn-3d genre-tab" data-category="action">🔫 Action &amp; FPS</button>
+            <button class="btn-3d genre-tab" data-category="platformer">🕹️ Platformers</button>
+            <button class="btn-3d genre-tab" data-category="strategy">🏰 Strategy</button>
+            <button class="btn-3d genre-tab" data-category="racing">🏎️ Racing</button>
+            <button class="btn-3d genre-tab" data-category="adventure">⚔️ RPG &amp; Adventure</button>
+            <button class="btn-3d genre-tab" data-category="puzzle">🧩 Puzzle &amp; Logic</button>
+          </div>
+
+          <!-- STATUS / COUNTER BANNER -->
+          <div id="archiveStatusMsg" style="font-size:13px; color:#444; margin: 4px 0; font-weight:bold;">Showing 26 curated MS-DOS classics. Click Download &amp; Install to play.</div>
+
+          <!-- CATALOG GRID CONTAINER -->
+          <div class="catalog-grid-box win-inset" id="archiveResultsBox">
+            <!-- Dynamically rendered catalog cards -->
+          </div>
+        </div>
+        <div class="modal-actions" style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:12px; color:#666">⚡ Native app: automatic install into ~/DOSGAMES • Browser: ZIP download only</span>
+          <button class="btn-3d" id="btnCloseArchive">Close Catalog</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: GAME SAVES & CHECKPOINTS VAULT -->
+    <div class="modal-overlay" id="modalSaves">
+      <div class="modal-box win-outset" style="width: 720px; max-width: 95vw;">
+        <div class="title-bar">
+          <div class="title-text">
+            <span>💾 DOS Game Saves &amp; Checkpoints Vault</span>
+          </div>
+          <button class="title-btn" id="btnCancelSavesX">✕</button>
+        </div>
+        <div class="modal-content" style="max-height: 80vh; padding: 6px 10px;">
+          
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; border-bottom:1px solid #ccc; padding-bottom:4px">
+            <div>
+              <span id="savesGameTitle" style="font-weight:bold; font-size:16px; color:var(--win-blue)">Game Title</span>
+              <div id="savesGameFolder" style="font-size:12px; color:#555">Folder: /Users/mac/DOSGAMES/...</div>
+            </div>
+            <button class="btn-3d" id="btnOpenFinderSaves" style="font-size:12px;">📂 Open in Finder</button>
+          </div>
+
+          <!-- TABS -->
+          <div class="catalog-genre-tabs" id="savesTabs">
+            <button class="btn-3d genre-tab active" id="tabLiveSaves">📂 In-Game Save Files</button>
+            <button class="btn-3d genre-tab" id="tabCheckpoints">⏪ Saved Checkpoints (Snapshots)</button>
+          </div>
+
+          <!-- TAB 1: LIVE IN-GAME SAVES -->
+          <div id="viewLiveSaves">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin: 4px 0;">
+              <span style="font-size:13px; font-weight:bold;">Active Save Files in Game Folder:</span>
+              <button class="btn-3d" id="btnRefreshLiveSaves" style="font-size:12px;">🔄 Refresh</button>
+            </div>
+            <div class="game-list-box win-inset" id="liveSavesList" style="min-height:160px; max-height:220px; overflow-y:auto; padding:4px;">
+              <!-- Rendered save files -->
+            </div>
+
+            <!-- CREATE SNAPSHOT SECTION -->
+            <div class="field-block win-outset" style="margin-top:8px; padding:6px; background:#e8e8e8;">
+              <span class="field-label">➕ Create Backup Checkpoint:</span>
+              <div style="display:flex; gap:4px; margin-top:2px;">
+                <input type="text" id="inputCheckpointName" class="folder-input" placeholder="e.g. Episode 3 Boss, Before Dragon, 500k City...">
+                <button class="btn-3d" id="btnCreateCheckpoint" style="background:#008080; color:#fff; white-space:nowrap;">💾 Create Checkpoint</button>
+              </div>
+              <div style="font-size:11px; color:#666; margin-top:2px">Snapshots let you restore your progress at any time without losing your save files.</div>
+            </div>
+          </div>
+
+          <!-- TAB 2: CHECKPOINTS (RESTORE POINTS) -->
+          <div id="viewCheckpoints" style="display:none;">
+            <div style="font-size:13px; font-weight:bold; margin: 4px 0;">Stored Backup Checkpoints:</div>
+            <div class="game-list-box win-inset" id="checkpointsList" style="min-height:240px; max-height:300px; overflow-y:auto; padding:4px;">
+              <!-- Rendered checkpoints -->
+            </div>
+          </div>
+
+        </div>
+        <div class="modal-actions" style="display:flex; justify-content:space-between; align-items:center;">
+          <span id="savesStatusBanner" style="font-size:12px; color:#006600; font-weight:bold;"></span>
+          <button class="btn-3d" id="btnCloseSaves">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: FIRST-RUN SETUP -->
+    <div class="modal-overlay" id="modalSetupWizard">
+      <div class="modal-box win-outset feature-modal">
+        <div class="title-bar">
+          <div class="title-text"><span>GS SETUP / FIRST FLIGHT</span></div>
+          <button class="title-btn" id="btnCloseSetupWizard">✕</button>
+        </div>
+        <div class="modal-content">
+          <div class="wizard-progress"><span class="active">1 SYSTEM</span><span>2 LIBRARY</span><span>3 READY</span></div>
+          <h2>WELCOME TO GameSky.space</h2>
+          <p>This setup checks the emulator and your real game library. It never creates sample games.</p>
+          <div class="diagnostic-list" id="setupCheckResults"></div>
+          <div class="field-block">
+            <span class="field-label">DOS games folder:</span>
+            <div class="inline-action-row">
+              <input id="setupLibraryPath" class="folder-input" readonly="">
+              <button class="btn-3d" id="btnSetupChooseLibrary">BROWSE</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-3d" id="btnSetupRunChecks">RUN SYSTEM CHECK</button>
+          <button class="btn-3d primary-action" id="btnFinishSetup">FINISH SETUP</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: GAME DIAGNOSTICS -->
+    <div class="modal-overlay" id="modalDiagnostics">
+      <div class="modal-box win-outset feature-modal">
+        <div class="title-bar">
+          <div class="title-text"><span>GAME DIAGNOSTICS</span></div>
+          <button class="title-btn" id="btnCloseDiagnosticsX">✕</button>
+        </div>
+        <div class="modal-content">
+          <div class="feature-heading" id="diagnosticsGameTitle">NO GAME</div>
+          <div class="diagnostic-list" id="diagnosticsResults"></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-3d" id="btnAutoRepairGame">REPAIR AUTOMATICALLY</button>
+          <button class="btn-3d" id="btnCloseDiagnostics">CLOSE</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: MULTI-DISC MEDIA MANAGER -->
+    <div class="modal-overlay" id="modalMediaManager">
+      <div class="modal-box win-outset feature-modal">
+        <div class="title-bar">
+          <div class="title-text"><span>MEDIA MANAGER / CD-ROM + FLOPPY</span></div>
+          <button class="title-btn" id="btnCloseMediaManagerX">✕</button>
+        </div>
+        <div class="modal-content">
+          <div class="field-grid-2">
+            <div class="field-block">
+              <span class="field-label">CD-ROM mode:</span>
+              <select id="mediaCdMode" class="retro-dropdown">
+                <option value="swap">Multiple images on D: / swap with Cmd+F4</option>
+                <option value="separate-drives">Separate drives D:, E:, F:…</option>
+                <option value="single">Single CD image</option>
+              </select>
+            </div>
+            <div class="field-block">
+              <span class="field-label">Active drive:</span>
+              <select id="mediaDriveLetter" class="retro-dropdown"><option>D</option><option>E</option><option>F</option></select>
+            </div>
+          </div>
+          <div class="media-section">
+            <div class="media-section-head"><strong>CD-ROM IMAGES</strong><button class="btn-3d" id="btnAddCdImages">+ ADD IMAGES</button></div>
+            <div class="media-item-list" id="cdMediaList"></div>
+          </div>
+          <div class="media-section">
+            <div class="media-section-head"><strong>FLOPPY IMAGES</strong><button class="btn-3d" id="btnAddFloppyImages">+ ADD IMAGES</button></div>
+            <div class="media-item-list" id="floppyMediaList"></div>
+          </div>
+          <div class="feature-status" id="mediaManagerStatus"></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-3d" id="btnClearMediaSets">CLEAR MEDIA</button>
+          <button class="btn-3d primary-action" id="btnSaveMediaSets">SAVE MEDIA</button>
+          <button class="btn-3d" id="btnCloseMediaManager">CLOSE</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: CONTROLLER PROFILE -->
+    <div class="modal-overlay" id="modalControls">
+      <div class="modal-box win-outset feature-modal">
+        <div class="title-bar">
+          <div class="title-text"><span>CONTROLLER / KEY MAPPER</span></div>
+          <button class="title-btn" id="btnCloseControlsX">✕</button>
+        </div>
+        <div class="modal-content">
+          <div class="field-grid-2">
+            <div class="field-block"><span class="field-label">Profile template:</span><select id="controlsTemplate" class="retro-dropdown"><option value="platformer">Platformer</option><option value="fps">FPS</option><option value="adventure">Adventure</option><option value="racing">Racing</option><option value="native">Native DOS Joystick</option></select></div>
+            <div class="field-block"><span class="field-label">Joystick mode:</span><select id="controlsJoystickType" class="retro-dropdown"><option value="hidden">Controller maps to keyboard</option><option value="auto">Native auto-detect</option><option value="2axis">2-axis joystick</option><option value="4axis">4-axis joystick</option><option value="fcs">Thrustmaster FCS</option><option value="ch">CH Flightstick</option><option value="disabled">Disabled</option></select></div>
+          </div>
+          <div class="field-block"><span class="field-label">Deadzone: <b id="controlsDeadzoneValue">10%</b></span><input id="controlsDeadzone" type="range" min="0" max="60" value="10"></div>
+          <label class="check-option"><input id="controlsAutofire" type="checkbox"> Autofire</label>
+          <label class="check-option"><input id="controlsCircular" type="checkbox"> Circular-to-square analog correction</label>
+          <div class="mapper-preview" id="controlsMapperPreview"></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-3d primary-action" id="btnSaveControls">SAVE CONTROLS</button>
+          <button class="btn-3d" id="btnCloseControls">CLOSE</button>
+        </div>
+      </div>
+    </div>
+
+  
+
+</body></html>
