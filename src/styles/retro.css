@@ -1362,6 +1362,24 @@ body {
   color: var(--ink-charcoal);
 }
 
+.footer-sublink-row {
+  margin-top: 8px;
+}
+
+.footer-sublink {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.1s;
+}
+
+.footer-sublink:hover {
+  color: var(--ink-black);
+}
+
 /* EDITORIAL LEGAL MODAL */
 .editorial-modal-overlay {
   position: fixed;

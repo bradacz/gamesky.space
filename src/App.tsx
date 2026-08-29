@@ -76,8 +76,8 @@ const I18N = {
     sealQuality: 'SEAL OF QUALITY ★★★★★',
     offlineReady: '100% OFFLINE READY',
     footerBlock1Title: '💾 PODPOROVANÉ DOSBOX ENGINE',
-    footerBlock2Title: '🌐 PROJEKTY',
-    footerBlock3Title: '⚖️ PRÁVNÍ INFORMACE & PROJEKT',
+    footerBlock2Title: '🌐 Odkazy',
+    footerBlock3Title: '⚖️ Info',
     footerGdpr: 'GDPR, Cookies & Hosting',
     footerLicenseLink: 'Licence MIT & GPLv2',
     footerLicenseNote: 'GameSky.space je nezávislý open-source software publikovaný pod licencí MIT. Emulační jádro spolupracuje s DOSBox, DOSBox-Staging a DOSBox-X (GPLv2). Všechny registrované ochranné známky a názvy her náleží jejich původním vlastníkům.',
@@ -160,8 +160,8 @@ const I18N = {
     sealQuality: 'SEAL OF QUALITY ★★★★★',
     offlineReady: '100% OFFLINE READY',
     footerBlock1Title: '💾 SUPPORTED DOS ENGINES',
-    footerBlock2Title: '🌐 PROJECTS',
-    footerBlock3Title: '⚖️ LEGAL & REPOSITORY',
+    footerBlock2Title: '🌐 Links',
+    footerBlock3Title: '⚖️ Info',
     footerGdpr: 'GDPR, Cookies & Hosting',
     footerLicenseLink: 'MIT & GPLv2 License',
     footerLicenseNote: 'GameSky.space is independent open-source software released under the MIT License. The emulation runtime integrates with DOSBox, DOSBox-Staging, and DOSBox-X (GPLv2). All registered trademarks and game titles belong to their respective copyright holders.',
@@ -700,6 +700,17 @@ export const App: React.FC = () => {
           <p className="footer-editorial-copy">
             {t.footerCopy}
           </p>
+
+          <div className="footer-sublink-row">
+            <a
+              href="https://www.mylocalio.com"
+              target="_blank"
+              rel="noreferrer"
+              className="footer-sublink"
+            >
+              www.mylocalio.com
+            </a>
+          </div>
         </div>
       </footer>
 
