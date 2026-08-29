@@ -1259,6 +1259,21 @@ body {
   transform: none;
 }
 
+.coupon-brand-badge .brand-logo-text {
+  color: #ffffff !important;
+  text-shadow: 2px 2px 0px #000000;
+}
+
+.coupon-brand-badge .brand-subline-badge {
+  color: var(--cmyk-cyan) !important;
+  text-shadow: 1px 1px 0px #000000;
+}
+
+.coupon-brand-badge .brand-logo-img {
+  border-color: var(--cmyk-yellow);
+  background: #000000;
+}
+
 .coupon-brand-badge:hover {
   transform: translate(-1px, -1px);
   box-shadow: 5px 5px 0px var(--ink-black);
