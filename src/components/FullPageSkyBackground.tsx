@@ -3,8 +3,33 @@ import React from 'react';
 export const FullPageSkyBackground: React.FC = () => {
   return (
     <div className="fullpage-sky-bg" aria-hidden="true">
-      {/* 1. PIXEL STARS (NIGHT SKY - LEFT HALF) */}
+      {/* 1. PIXEL STARS & CRESCENT MOON (NIGHT SKY - LEFT HALF) */}
       <div className="fullpage-stars-container">
+        {/* Pixel Crescent Moon */}
+        <div className="fullpage-moon-container">
+          <svg className="fullpage-moon-svg" viewBox="0 0 32 32" width="60" height="60">
+            {/* Outer Crescent Arc */}
+            <rect x="14" y="2" width="6" height="3" fill="#FFFCE6" />
+            <rect x="18" y="5" width="5" height="3" fill="#FFFCE6" />
+            <rect x="21" y="8" width="4" height="4" fill="#FFFCE6" />
+            <rect x="23" y="12" width="4" height="8" fill="#FFFCE6" />
+            <rect x="21" y="20" width="4" height="4" fill="#FFFCE6" />
+            <rect x="18" y="24" width="5" height="3" fill="#FFFCE6" />
+            <rect x="14" y="27" width="6" height="3" fill="#FFFCE6" />
+
+            {/* Inner Body */}
+            <rect x="10" y="5" width="8" height="3" fill="#FFF9C4" />
+            <rect x="13" y="8" width="8" height="4" fill="#FFF9C4" />
+            <rect x="15" y="12" width="8" height="8" fill="#FFFFFF" />
+            <rect x="13" y="20" width="8" height="4" fill="#FFF9C4" />
+            <rect x="10" y="24" width="8" height="3" fill="#FFF9C4" />
+
+            {/* Moon Crater Accents */}
+            <rect x="18" y="14" width="3" height="3" fill="#FFE082" />
+            <rect x="15" y="18" width="2" height="2" fill="#FFE082" />
+          </svg>
+        </div>
+
         {/* Large 4-point Cross Stars */}
         <span className="sky-star star-cross star-1" style={{ left: '3%', top: '8%' }}>✦</span>
         <span className="sky-star star-cross star-2" style={{ left: '7%', top: '22%' }}>✧</span>
@@ -97,9 +122,9 @@ export const FullPageSkyBackground: React.FC = () => {
         </svg>
       </div>
 
-      {/* 4. PIXEL ART SUN (DAYLIGHT SKY - TOP RIGHT) */}
+      {/* 4. PIXEL ART SUN (DAYLIGHT SKY - RIGHT SIDE) */}
       <div className="fullpage-sun-container">
-        <svg className="fullpage-sun-svg" viewBox="0 0 40 40" width="56" height="56">
+        <svg className="fullpage-sun-svg" viewBox="0 0 40 40" width="76" height="76">
           {/* Sun Core */}
           <rect x="10" y="10" width="20" height="20" fill="#FFE600" />
           <rect x="12" y="8" width="16" height="24" fill="#FFE600" />
