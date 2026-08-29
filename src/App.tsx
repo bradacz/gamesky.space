@@ -550,6 +550,9 @@ export const App: React.FC = () => {
 
       {/* 7. UNIFIED MODULAR EDITORIAL FOOTER */}
       <footer className="editorial-footer">
+        {/* Night to Day Pixel Sky Canvas */}
+        <NavbarSkyArt />
+
         <div className="footer-container">
           <div className="footer-modular-grid">
             {/* Module 1: Supported DOSBox Versions */}
