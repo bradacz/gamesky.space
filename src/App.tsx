@@ -253,53 +253,55 @@ export const App: React.FC = () => {
         {/* Night to Day Pixel Sky Canvas */}
         <NavbarSkyArt />
 
-        <a href="#hero" className="navbar-brand-badge">
-          <div className="brand-icon-wrapper">
-            <img src="/app-icon.png" alt="GameSky Logo" className="brand-logo-img" />
-          </div>
-          <div className="brand-text-block">
-            <div className="brand-logo-text">
-              GameSky<span className="brand-tld-pill">.space</span>
+        <div className="navbar-container">
+          <a href="#hero" className="navbar-brand-badge">
+            <div className="brand-icon-wrapper">
+              <img src="/app-icon.png" alt="GameSky Logo" className="brand-logo-img" />
             </div>
-            <div className="brand-subline-badge">RETRO DOS WORKSTATION</div>
+            <div className="brand-text-block">
+              <div className="brand-logo-text">
+                GameSky<span className="brand-tld-pill">.space</span>
+              </div>
+              <div className="brand-subline-badge">RETRO DOS WORKSTATION</div>
+            </div>
+          </a>
+
+          <div className="navbar-links">
+            <a href="#compare" className="nav-tab-btn">{t.navCompare}</a>
+            <a href="#hardware" className="nav-tab-btn">{t.navHardware}</a>
+            <a href="#download" className="nav-tab-btn">{t.navDownload}</a>
           </div>
-        </a>
 
-        <div className="navbar-links">
-          <a href="#compare" className="nav-tab-btn">{t.navCompare}</a>
-          <a href="#hardware" className="nav-tab-btn">{t.navHardware}</a>
-          <a href="#download" className="nav-tab-btn">{t.navDownload}</a>
-        </div>
+          <div className="navbar-actions-group" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* Buy Me a Coffee Nav Button */}
+            <a
+              href="https://www.buymeacoffee.com/mariantomay"
+              target="_blank"
+              rel="noreferrer"
+              className="btn-nav-bmc"
+              title="Buy me a coffee"
+            >
+              <span>☕</span>
+              <span>{t.btnBmcNav}</span>
+            </a>
 
-        <div className="navbar-actions-group" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* Buy Me a Coffee Nav Button */}
-          <a
-            href="https://www.buymeacoffee.com/mariantomay"
-            target="_blank"
-            rel="noreferrer"
-            className="btn-nav-bmc"
-            title="Buy me a coffee"
-          >
-            <span>☕</span>
-            <span>{t.btnBmcNav}</span>
-          </a>
+            {/* GitHub Repo Button */}
+            <a
+              href="https://github.com/bradacz/gamesky.space"
+              target="_blank"
+              rel="noreferrer"
+              className="btn-nav-github"
+              title="GitHub Repository"
+            >
+              <span>🐙</span>
+              <span>GitHub</span>
+            </a>
 
-          {/* GitHub Repo Button */}
-          <a
-            href="https://github.com/bradacz/gamesky.space"
-            target="_blank"
-            rel="noreferrer"
-            className="btn-nav-github"
-            title="GitHub Repository"
-          >
-            <span>🐙</span>
-            <span>GitHub</span>
-          </a>
-
-          <a href="#download" className="btn-nav-tearoff">
-            <span>💾</span>
-            <span>{t.btnNavDownload}</span>
-          </a>
+            <a href="#download" className="btn-nav-tearoff">
+              <span>💾</span>
+              <span>{t.btnNavDownload}</span>
+            </a>
+          </div>
         </div>
       </nav>
 
