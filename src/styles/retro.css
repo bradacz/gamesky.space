@@ -3,7 +3,7 @@
    100% Non-AI Aesthetic • Authentic CMYK Print, Halftone & Perforated Coupons
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800;900&family=JetBrains+Mono:wght@500;700;800&family=Space+Grotesk:wght@600;700;800&family=VT323&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@700;800;900&family=Space+Grotesk:wght@600;700;800&family=JetBrains+Mono:wght@500;700;800&family=VT323&display=swap');
 
 :root {
   /* Print CMYK & Newsprint Palette */
@@ -23,7 +23,7 @@
   --cmyk-blue: #0038ff;
   --cmyk-green: #00a651;
 
-  --font-headline: 'Plus Jakarta Sans', -apple-system, sans-serif;
+  --font-headline: 'Outfit', 'Space Grotesk', sans-serif;
   --font-editorial: 'Space Grotesk', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
   --font-dos: 'VT323', monospace;
@@ -438,20 +438,25 @@ body {
 
 .hero-main-title {
   font-family: var(--font-headline);
-  font-size: 58px;
-  font-weight: 900;
-  line-height: 1.05;
-  letter-spacing: -2px;
-  margin-bottom: 24px;
+  font-size: 52px;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.5px;
+  word-spacing: 0.22em;
+  margin-bottom: 26px;
   color: var(--ink-black);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .hero-main-title .highlight-yellow {
   background: var(--cmyk-yellow);
-  padding: 0 8px;
+  color: var(--ink-black);
+  padding: 2px 14px;
   display: inline-block;
-  box-shadow: 3px 3px 0px var(--ink-black);
+  border: 2px solid var(--ink-black);
+  border-radius: 4px;
+  box-shadow: 4px 4px 0px var(--ink-black);
+  margin-right: 8px;
 }
 
 .hero-lead-text {
