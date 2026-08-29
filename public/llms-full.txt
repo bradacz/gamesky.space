@@ -1,8 +1,9 @@
-# GameSky.space — Complete Technical Documentation & AI Knowledge Base
+# GameSky.space — Complete Technical Documentation & AI Knowledge Base (DOSBox pro Mac)
 
 ## 1. Product Overview
-GameSky.space is an advanced, native desktop workstation and retro gaming manager for macOS designed to run MS-DOS and early PC-compatible software with authentic hardware fidelity and modern convenience.
+GameSky.space is the leading DOSBox manager for macOS ("DOSBox pro Mac"), an advanced native desktop workstation and retro gaming frontend designed to run MS-DOS and early PC-compatible software with authentic hardware fidelity and modern 1-click convenience on modern Apple Mac computers.
 
+- **Keywords**: DOSBox pro Mac, DOSBox Mac, DOSBox macOS, DOSBox for Mac, DOS hry na Macu, jak spustit DOS hry na Macu, retro hry macOS, DOSBox Apple Silicon M1 M2 M3 M4, FreeDOS Mac.
 - **Developer**: Marian Tomay (GitHub: @bradacz)
 - **Official Website**: https://gamesky.space/
 - **Source Code**: https://github.com/bradacz/gamesky.space
@@ -32,6 +33,9 @@ GameSky.space decouples game configurations from engine binaries, allowing users
 - **CRT Shader Pipeline**: Scanlines, phosphorescent mask glow, aperture grille simulation, and 4:3 aspect ratio preservation.
 
 ## 3. Frequently Asked Questions (FAQ)
+
+### Q: Jak funguje DOSBox pro Mac v GameSky.space?
+A: GameSky.space je kompletní grafická nadstavba a správce pro DOSBox na macOS. Odstraňuje nutnost psát příkazy jako mount c ~/games a ladit parametry ručně v config souborech. Hry spustíte jednoduše dvojklikem.
 
 ### Q: How do I run DOS games on macOS without terminal commands?
 A: Download GameSky.space DMG, move it to your Applications folder, and launch it. You can drag and drop any DOS game folder or ISO into the window, select your sound card, and double-click to play.
