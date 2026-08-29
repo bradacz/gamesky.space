@@ -22,9 +22,9 @@ const I18N = {
     btnBmcCard: 'Buy me a coffee',
     stickerBadge: '★ VERIFIED RUST & TAURI V2 CORE ★',
     heroKicker: 'REPORTÁŽ MĚSÍCE • RUBRIKA: RETRO COMPUTING',
-    heroTitle1: 'Zlatá éra DOSu na Macu.',
-    heroTitleHighlight: '100% Přímé spouštění.',
-    heroTitle2: 'Žádný terminál.',
+    heroTitle1: 'Čas na 640 KB paměti a 256 barev.',
+    heroTitleHighlight: 'Retro',
+    heroTitle2: 'bez složité konfigurace.',
     heroLead: 'Konec úmorného vypisování příkazů, manuálního ladění EMS paměti a konfliktů zvukových karet. GameSky.space přináší kompletní, jednoduchý správce DOSBoxu pro moderní macOS.',
     btnHeroDownload: 'STÁHNOUT macOS BALÍČEK (.DMG)',
     btnHeroSound: 'Otestovat Sound Blaster 16',
@@ -74,10 +74,12 @@ const I18N = {
     downloadSpecs: 'Verze 1.0.0 • Apple Silicon M1-M4 & Intel • 64-bit',
     sealQuality: 'SEAL OF QUALITY ★★★★★',
     offlineReady: '100% OFFLINE READY',
-    footerNetworkLabel: 'SÍŤ PROJEKTŮ & PARTNEŘI',
+    footerBlock1Title: '💾 PODPOROVANÉ DOSBOX ENGINE',
+    footerBlock2Title: '🌐 SÍŤ PROJEKTŮ & PARTNEŘI',
+    footerBlock3Title: '⚖️ PRÁVNÍ INFORMACE & PROJEKT',
     footerGdpr: 'GDPR, Cookies & Hosting',
     footerLicenseLink: 'Licence MIT & GPLv2',
-    footerLicenseNote: 'GameSky.space je nezávislý open-source software publikovaný pod licencí MIT. Emulační jádro spolupracuje s DOSBox / DOSBox-Staging (GPLv2). Všechny registrované ochranné známky a názvy her náleží jejich původním vlastníkům.',
+    footerLicenseNote: 'GameSky.space je nezávislý open-source software publikovaný pod licencí MIT. Emulační jádro spolupracuje s DOSBox, DOSBox-Staging a DOSBox-X (GPLv2). Všechny registrované ochranné známky a názvy her náleží jejich původním vlastníkům.',
     footerCopy: 'GameSky.space © 1995–2026. Vyvinuto v Rustu a Tauri v2 pro macOS.',
     gdprTitle: 'ZÁSADY OCHRANY SOUKROMÍ, COOKIES & HOSTING',
     gdprSecHosting: '1. Hosting & Infrastruktura (Cloudflare Pages & Google Sites):',
@@ -104,9 +106,9 @@ const I18N = {
     btnBmcCard: 'Buy me a coffee',
     stickerBadge: '★ VERIFIED RUST & TAURI V2 CORE ★',
     heroKicker: 'FEATURE OF THE MONTH • SECTION: RETRO COMPUTING',
-    heroTitle1: 'Golden Era of DOS on Mac.',
-    heroTitleHighlight: '100% Direct Launch.',
-    heroTitle2: 'Zero Terminal.',
+    heroTitle1: 'Time for 640 KB Memory & 256 Colors.',
+    heroTitleHighlight: 'Retro gaming',
+    heroTitle2: 'without complex setup.',
     heroLead: 'Say goodbye to typing endless terminal commands, manually tuning EMS memory, and fighting audio IRQ conflicts. GameSky.space brings a complete, simple DOSBox manager for modern macOS.',
     btnHeroDownload: 'DOWNLOAD macOS PACKAGE (.DMG)',
     btnHeroSound: 'Test Sound Blaster 16',
@@ -156,10 +158,12 @@ const I18N = {
     downloadSpecs: 'Version 1.0.0 • Apple Silicon M1-M4 & Intel • 64-bit Universal',
     sealQuality: 'SEAL OF QUALITY ★★★★★',
     offlineReady: '100% OFFLINE READY',
-    footerNetworkLabel: 'NETWORK OF PROJECTS & PARTNERS',
+    footerBlock1Title: '💾 SUPPORTED DOS ENGINES',
+    footerBlock2Title: '🌐 NETWORK & PARTNER PROJECTS',
+    footerBlock3Title: '⚖️ LEGAL & REPOSITORY',
     footerGdpr: 'GDPR, Cookies & Hosting',
     footerLicenseLink: 'MIT & GPLv2 License',
-    footerLicenseNote: 'GameSky.space is independent open-source software released under the MIT License. The emulation runtime integrates with DOSBox / DOSBox-Staging (GPLv2). All registered trademarks and game titles belong to their respective copyright holders.',
+    footerLicenseNote: 'GameSky.space is independent open-source software released under the MIT License. The emulation runtime integrates with DOSBox, DOSBox-Staging, and DOSBox-X (GPLv2). All registered trademarks and game titles belong to their respective copyright holders.',
     footerCopy: 'GameSky.space © 1995–2026. Built with Rust and Tauri v2 for macOS.',
     gdprTitle: 'PRIVACY POLICY, COOKIES & HOSTING NOTICE',
     gdprSecHosting: '1. Hosting & Infrastructure (Cloudflare Pages & Google Sites):',
@@ -540,87 +544,159 @@ export const App: React.FC = () => {
         </div>
       </section>
 
-      {/* 7. EDITORIAL FOOTER WITH NETWORK & LEGAL LINKS */}
+      {/* 7. UNIFIED MODULAR EDITORIAL FOOTER */}
       <footer className="editorial-footer">
-        {/* Network & Partner Links */}
-        <div className="footer-network-label">
-          {t.footerNetworkLabel}
-        </div>
-        <div className="footer-links-grid">
-          <a href="https://loftp.space" target="_blank" rel="noreferrer" className="footer-link-chip">
-            <span>🪐</span>
-            <span>loftp.space</span>
-          </a>
-          <a href="https://l-cms.site" target="_blank" rel="noreferrer" className="footer-link-chip">
-            <span>⚡</span>
-            <span>l-cms.site</span>
-          </a>
-          <a href="https://fitrepairstudio.site" target="_blank" rel="noreferrer" className="footer-link-chip">
-            <span>🛠️</span>
-            <span>fitrepairstudio.site</span>
-          </a>
-          <a href="https://promethe.fun" target="_blank" rel="noreferrer" className="footer-link-chip">
-            <span>🎮</span>
-            <span>promethe.fun</span>
-          </a>
-        </div>
+        <div className="footer-container">
+          <div className="footer-modular-grid">
+            {/* Module 1: Supported DOSBox Versions */}
+            <div className="footer-module-card">
+              <div className="footer-module-title">
+                {t.footerBlock1Title}
+              </div>
+              <div className="footer-module-list">
+                <a
+                  href="https://www.dosbox.com"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="footer-item-link"
+                >
+                  <span>🕹️</span>
+                  <span>DOSBox 0.74-3</span>
+                  <span className="footer-item-tag">Official</span>
+                </a>
+                <a
+                  href="https://dosbox-staging.github.io"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="footer-item-link"
+                >
+                  <span>⚡</span>
+                  <span>DOSBox Staging</span>
+                  <span className="footer-item-tag">Modern</span>
+                </a>
+                <a
+                  href="https://dosbox-x.com"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="footer-item-link"
+                >
+                  <span>💻</span>
+                  <span>DOSBox-X</span>
+                  <span className="footer-item-tag">Advanced</span>
+                </a>
+              </div>
+            </div>
 
-        {/* Legal & Compliance Row */}
-        <div className="footer-legal-row">
-          <button
-            onClick={() => openModal('gdpr')}
-            className="footer-legal-link"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit' }}
-          >
-            {t.footerGdpr}
-          </button>
-          <span>•</span>
-          <button
-            onClick={() => openModal('license')}
-            className="footer-legal-link"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit' }}
-          >
-            {t.footerLicenseLink}
-          </button>
-          <span>•</span>
-          <a href="https://github.com/bradacz/gamesky.space" target="_blank" rel="noreferrer" className="footer-legal-link">
-            GitHub Repo
-          </a>
-          <span>•</span>
-          <a href="https://freedos.org" target="_blank" rel="noreferrer" className="footer-legal-link">
-            FreeDOS.org
-          </a>
-        </div>
+            {/* Module 2: Network & Partners */}
+            <div className="footer-module-card">
+              <div className="footer-module-title">
+                {t.footerBlock2Title}
+              </div>
+              <div className="footer-module-list">
+                <a
+                  href="https://loftp.space"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="footer-item-link"
+                >
+                  <span>🪐</span>
+                  <span>loftp.space</span>
+                </a>
+                <a
+                  href="https://l-cms.site"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="footer-item-link"
+                >
+                  <span>⚡</span>
+                  <span>l-cms.site</span>
+                </a>
+                <a
+                  href="https://fitrepairstudio.site"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="footer-item-link"
+                >
+                  <span>🛠️</span>
+                  <span>fitrepairstudio.site</span>
+                </a>
+                <a
+                  href="https://promethe.fun"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="footer-item-link"
+                >
+                  <span>🎮</span>
+                  <span>promethe.fun</span>
+                </a>
+              </div>
+            </div>
 
-        {/* License Note */}
-        <p className="footer-license-note">
-          {t.footerLicenseNote}
-        </p>
-
-        {/* Footer Language Switcher */}
-        <div style={{ display: 'flex', justifyContent: 'center', margin: '14px 0 18px' }}>
-          <div className="lang-switcher-box">
-            <button
-              className={`btn-lang-toggle ${lang === 'cs' ? 'lang-active' : ''}`}
-              onClick={() => handleLangToggle('cs')}
-              title="Čeština"
-            >
-              🇨🇿 CS
-            </button>
-            <span className="lang-sep">|</span>
-            <button
-              className={`btn-lang-toggle ${lang === 'en' ? 'lang-active' : ''}`}
-              onClick={() => handleLangToggle('en')}
-              title="English"
-            >
-              🇬🇧 EN
-            </button>
+            {/* Module 3: Legal & Open-Source */}
+            <div className="footer-module-card">
+              <div className="footer-module-title">
+                {t.footerBlock3Title}
+              </div>
+              <div className="footer-module-list">
+                <button
+                  onClick={() => openModal('gdpr')}
+                  className="footer-item-link"
+                >
+                  <span>🔒</span>
+                  <span>{t.footerGdpr}</span>
+                </button>
+                <button
+                  onClick={() => openModal('license')}
+                  className="footer-item-link"
+                >
+                  <span>📜</span>
+                  <span>{t.footerLicenseLink}</span>
+                </button>
+                <a
+                  href="https://github.com/bradacz/gamesky.space"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="footer-item-link"
+                >
+                  <span>🐙</span>
+                  <span>GitHub Repozitář</span>
+                </a>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <p className="footer-editorial-copy">
-          {t.footerCopy}
-        </p>
+          <hr className="footer-bottom-divider" />
+
+          {/* Footer Language Switcher */}
+          <div style={{ display: 'flex', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <div className="lang-switcher-box">
+              <button
+                className={`btn-lang-toggle ${lang === 'cs' ? 'lang-active' : ''}`}
+                onClick={() => handleLangToggle('cs')}
+                title="Čeština"
+              >
+                🇨🇿 CS
+              </button>
+              <span className="lang-sep">|</span>
+              <button
+                className={`btn-lang-toggle ${lang === 'en' ? 'lang-active' : ''}`}
+                onClick={() => handleLangToggle('en')}
+                title="English"
+              >
+                🇬🇧 EN
+              </button>
+            </div>
+          </div>
+
+          {/* License Note & Copyright */}
+          <p className="footer-license-note">
+            {t.footerLicenseNote}
+          </p>
+
+          <p className="footer-editorial-copy">
+            {t.footerCopy}
+          </p>
+        </div>
       </footer>
 
       {/* EDITORIAL LEGAL MODAL (GDPR / LICENSE) */}
