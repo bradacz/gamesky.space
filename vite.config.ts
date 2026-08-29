@@ -11,7 +11,6 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        website: resolve(__dirname, "index.html"),
         launcher: resolve(__dirname, "app.html"),
       },
     },
