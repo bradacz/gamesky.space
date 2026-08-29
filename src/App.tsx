@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { retroAudio } from './audio/retroSynth';
 import { InteractiveAppShowcase } from './components/InteractiveAppShowcase';
 import { CookieBanner } from './components/CookieBanner';
-import { NavbarSkyArt } from './components/NavbarSkyArt';
 import { FullPageSkyBackground } from './components/FullPageSkyBackground';
 import './styles/retro.css';
 
@@ -251,9 +250,6 @@ export const App: React.FC = () => {
 
       {/* 2. MAIN EDITORIAL NAVBAR */}
       <nav className="editorial-navbar">
-        {/* Night to Day Pixel Sky Canvas */}
-        <NavbarSkyArt />
-
         <div className="navbar-container">
           <a href="#hero" className="navbar-brand-badge">
             <div className="brand-icon-wrapper">
@@ -574,9 +570,6 @@ export const App: React.FC = () => {
 
       {/* 7. UNIFIED COMPACT EDITORIAL FOOTER */}
       <footer className="editorial-footer">
-        {/* Night to Day Pixel Sky Canvas */}
-        <NavbarSkyArt />
-
         <div className="footer-container">
           <div className="footer-compact-grid">
             {/* Block 1: Supported DOSBox Versions */}
