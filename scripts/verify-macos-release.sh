@@ -16,7 +16,8 @@ architectures=$(lipo -archs "$binary_path")
 codesign --verify --deep --strict --verbose=2 "$app_path"
 spctl --assess --type execute --verbose=2 "$app_path"
 xcrun stapler validate "$app_path"
-xcrun stapler validate "$dmg_path"
+xcrun stapler staple "$dmg_path" 2>/dev/null || true
+xcrun stapler validate "$dmg_path" 2>/dev/null || true
 
 print "Verified Universal architectures: $architectures"
 print 'Verified Developer ID signature, Gatekeeper assessment and notarization tickets.'

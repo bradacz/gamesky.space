@@ -8,14 +8,23 @@ if (!outputPath || !publicKey) {
 
 const cdnBase = (process.env.BUNNY_CDN_BASE_URL || 'https://cdn.gamesky.space').replace(/\/+$/, '');
 const endpoint = `${cdnBase}/releases/latest.json`;
+const signingIdentity = process.env.APPLE_SIGNING_IDENTITY?.trim();
 
-writeFileSync(outputPath, `${JSON.stringify({
-  bundle: { createUpdaterArtifacts: true },
+const config = {
+  bundle: {
+    createUpdaterArtifacts: true,
+    macOS: {
+      signingIdentity: signingIdentity || undefined,
+    }
+  },
   plugins: {
     updater: {
       pubkey: publicKey,
       endpoints: [endpoint]
     }
   }
-}, null, 2)}\n`, { mode: 0o600 });
+};
+
+writeFileSync(outputPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+
 

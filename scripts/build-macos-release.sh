@@ -38,7 +38,7 @@ if [[ -z ${APPLE_API_ISSUER:-} || -z ${APPLE_API_KEY:-} || -z ${APPLE_API_KEY_PA
 fi
 
 print 'Building signed and notarized Universal GameSky.space application…'
-release_config=$(mktemp "${TMPDIR:-/tmp}/gamesky-tauri-release.XXXXXX.json")
+release_config=$(mktemp "${TMPDIR:-/tmp}/gamesky-tauri-release-XXXXXX")
 trap 'rm -f "$release_config"' EXIT
 GAMESKY_RELEASE_CONFIG_PATH="$release_config" node "$project_dir/scripts/generate-tauri-release-config.mjs"
 npm run tauri build -- --config "$release_config" --target universal-apple-darwin --bundles app,dmg
