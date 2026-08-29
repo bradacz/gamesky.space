@@ -1088,10 +1088,19 @@ body {
 }
 
 /* SECTION SPREAD */
-.editorial-section {
+.editorial-section,
+.editorial-spread-section {
   max-width: 1200px;
-  margin: 60px auto;
+  margin: 60px auto 70px;
   padding: 0 24px;
+}
+
+.editorial-spread-box {
+  background: var(--paper-card);
+  border: var(--border-heavy);
+  box-shadow: var(--shadow-deep);
+  padding: 48px;
+  position: relative;
 }
 
 .section-editorial-header {

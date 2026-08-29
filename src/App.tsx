@@ -360,146 +360,150 @@ export const App: React.FC = () => {
       </header>
 
       {/* 4. COMPARISON ARTICLE SPREAD */}
-      <section id="compare" className="editorial-section">
-        <div className="section-editorial-header">
-          <div className="sec-title-group">
-            <span className="sec-chapter-num">{t.chapter2Num}</span>
-            <h2 className="sec-headline">{t.chapter2Title}</h2>
-            <p className="sec-deck">{t.chapter2Deck}</p>
-          </div>
-        </div>
-
-        <div className="editorial-compare-grid">
-          {/* Card: Then */}
-          <div className="compare-magazine-card compare-card-bad">
-            <span className="compare-stamp-header stamp-bad">{t.compareBadHeader}</span>
-            <h3 className="compare-card-title">{t.compareBadTitle}</h3>
-            <ul className="compare-list-editorial">
-              <li>
-                <span>✖</span>
-                <div>{t.compareBad1}</div>
-              </li>
-              <li>
-                <span>✖</span>
-                <div>{t.compareBad2}</div>
-              </li>
-              <li>
-                <span>✖</span>
-                <div>{t.compareBad3}</div>
-              </li>
-              <li>
-                <span>✖</span>
-                <div>{t.compareBad4}</div>
-              </li>
-            </ul>
+      <section id="compare" className="editorial-spread-section">
+        <div className="editorial-spread-box">
+          <div className="section-editorial-header">
+            <div className="sec-title-group">
+              <span className="sec-chapter-num">{t.chapter2Num}</span>
+              <h2 className="sec-headline">{t.chapter2Title}</h2>
+              <p className="sec-deck">{t.chapter2Deck}</p>
+            </div>
           </div>
 
-          {/* Card: Now */}
-          <div className="compare-magazine-card compare-card-good">
-            <span className="compare-stamp-header stamp-good">{t.compareGoodHeader}</span>
-            <h3 className="compare-card-title">{t.compareGoodTitle}</h3>
-            <ul className="compare-list-editorial">
-              <li>
-                <span>✔</span>
-                <div>{t.compareGood1}</div>
-              </li>
-              <li>
-                <span>✔</span>
-                <div>{t.compareGood2}</div>
-              </li>
-              <li>
-                <span>✔</span>
-                <div>{t.compareGood3}</div>
-              </li>
-              <li>
-                <span>✔</span>
-                <div>{t.compareGood4}</div>
-              </li>
-            </ul>
+          <div className="editorial-compare-grid">
+            {/* Card: Then */}
+            <div className="compare-magazine-card compare-card-bad">
+              <span className="compare-stamp-header stamp-bad">{t.compareBadHeader}</span>
+              <h3 className="compare-card-title">{t.compareBadTitle}</h3>
+              <ul className="compare-list-editorial">
+                <li>
+                  <span>✖</span>
+                  <div>{t.compareBad1}</div>
+                </li>
+                <li>
+                  <span>✖</span>
+                  <div>{t.compareBad2}</div>
+                </li>
+                <li>
+                  <span>✖</span>
+                  <div>{t.compareBad3}</div>
+                </li>
+                <li>
+                  <span>✖</span>
+                  <div>{t.compareBad4}</div>
+                </li>
+              </ul>
+            </div>
+
+            {/* Card: Now */}
+            <div className="compare-magazine-card compare-card-good">
+              <span className="compare-stamp-header stamp-good">{t.compareGoodHeader}</span>
+              <h3 className="compare-card-title">{t.compareGoodTitle}</h3>
+              <ul className="compare-list-editorial">
+                <li>
+                  <span>✔</span>
+                  <div>{t.compareGood1}</div>
+                </li>
+                <li>
+                  <span>✔</span>
+                  <div>{t.compareGood2}</div>
+                </li>
+                <li>
+                  <span>✔</span>
+                  <div>{t.compareGood3}</div>
+                </li>
+                <li>
+                  <span>✔</span>
+                  <div>{t.compareGood4}</div>
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
       </section>
 
       {/* 5. HARDWARE LAB TILES */}
-      <section id="hardware" className="editorial-section">
-        <div className="section-editorial-header">
-          <div className="sec-title-group">
-            <span className="sec-chapter-num">{t.chapter3Num}</span>
-            <h2 className="sec-headline">{t.chapter3Title}</h2>
-            <p className="sec-deck">{t.chapter3Deck}</p>
-          </div>
-        </div>
-
-        <div className="editorial-hardware-grid">
-          {/* Tile 1 */}
-          <div className="hardware-tile">
-            <div>
-              <div className="tile-icon-box">🎛️</div>
-              <h3 className="tile-title">{t.tile1Title}</h3>
-              <p className="tile-body">{t.tile1Desc}</p>
-            </div>
-            <button className="btn-tile-action" onClick={() => handleTestAudio('opl3')}>
-              {t.tile1Btn}
-            </button>
-          </div>
-
-          {/* Tile 2 */}
-          <div className="hardware-tile">
-            <div>
-              <div className="tile-icon-box">💿</div>
-              <h3 className="tile-title">{t.tile2Title}</h3>
-              <p className="tile-body">{t.tile2Desc}</p>
-            </div>
-            <button className="btn-tile-action" onClick={() => retroAudio.playFloppySeek()}>
-              {t.tile2Btn}
-            </button>
-          </div>
-
-          {/* Tile 3 */}
-          <div className="hardware-tile">
-            <div>
-              <div className="tile-icon-box">💾</div>
-              <h3 className="tile-title">{t.tile3Title}</h3>
-              <p className="tile-body">{t.tile3Desc}</p>
-            </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 800, color: 'var(--cmyk-green)' }}>
-              {t.tile3Status}
+      <section id="hardware" className="editorial-spread-section">
+        <div className="editorial-spread-box">
+          <div className="section-editorial-header">
+            <div className="sec-title-group">
+              <span className="sec-chapter-num">{t.chapter3Num}</span>
+              <h2 className="sec-headline">{t.chapter3Title}</h2>
+              <p className="sec-deck">{t.chapter3Deck}</p>
             </div>
           </div>
 
-          {/* Tile 4 */}
-          <div className="hardware-tile">
-            <div>
-              <div className="tile-icon-box">📺</div>
-              <h3 className="tile-title">{t.tile4Title}</h3>
-              <p className="tile-body">{t.tile4Desc}</p>
+          <div className="editorial-hardware-grid">
+            {/* Tile 1 */}
+            <div className="hardware-tile">
+              <div>
+                <div className="tile-icon-box">🎛️</div>
+                <h3 className="tile-title">{t.tile1Title}</h3>
+                <p className="tile-body">{t.tile1Desc}</p>
+              </div>
+              <button className="btn-tile-action" onClick={() => handleTestAudio('opl3')}>
+                {t.tile1Btn}
+              </button>
             </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 800 }}>
-              {t.tile4Status}
-            </div>
-          </div>
 
-          {/* Tile 5 */}
-          <div className="hardware-tile">
-            <div>
-              <div className="tile-icon-box">🌐</div>
-              <h3 className="tile-title">{t.tile5Title}</h3>
-              <p className="tile-body">{t.tile5Desc}</p>
+            {/* Tile 2 */}
+            <div className="hardware-tile">
+              <div>
+                <div className="tile-icon-box">💿</div>
+                <h3 className="tile-title">{t.tile2Title}</h3>
+                <p className="tile-body">{t.tile2Desc}</p>
+              </div>
+              <button className="btn-tile-action" onClick={() => retroAudio.playFloppySeek()}>
+                {t.tile2Btn}
+              </button>
             </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 800, color: 'var(--cmyk-green)' }}>
-              {t.tile5Status}
-            </div>
-          </div>
 
-          {/* Tile 6 */}
-          <div className="hardware-tile">
-            <div>
-              <div className="tile-icon-box">🦀</div>
-              <h3 className="tile-title">{t.tile6Title}</h3>
-              <p className="tile-body">{t.tile6Desc}</p>
+            {/* Tile 3 */}
+            <div className="hardware-tile">
+              <div>
+                <div className="tile-icon-box">💾</div>
+                <h3 className="tile-title">{t.tile3Title}</h3>
+                <p className="tile-body">{t.tile3Desc}</p>
+              </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 800, color: 'var(--cmyk-green)' }}>
+                {t.tile3Status}
+              </div>
             </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 800, color: 'var(--cmyk-blue)' }}>
-              {t.tile6Status}
+
+            {/* Tile 4 */}
+            <div className="hardware-tile">
+              <div>
+                <div className="tile-icon-box">📺</div>
+                <h3 className="tile-title">{t.tile4Title}</h3>
+                <p className="tile-body">{t.tile4Desc}</p>
+              </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 800 }}>
+                {t.tile4Status}
+              </div>
+            </div>
+
+            {/* Tile 5 */}
+            <div className="hardware-tile">
+              <div>
+                <div className="tile-icon-box">🌐</div>
+                <h3 className="tile-title">{t.tile5Title}</h3>
+                <p className="tile-body">{t.tile5Desc}</p>
+              </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 800, color: 'var(--cmyk-green)' }}>
+                {t.tile5Status}
+              </div>
+            </div>
+
+            {/* Tile 6 */}
+            <div className="hardware-tile">
+              <div>
+                <div className="tile-icon-box">🦀</div>
+                <h3 className="tile-title">{t.tile6Title}</h3>
+                <p className="tile-body">{t.tile6Desc}</p>
+              </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 800, color: 'var(--cmyk-blue)' }}>
+                {t.tile6Status}
+              </div>
             </div>
           </div>
         </div>
