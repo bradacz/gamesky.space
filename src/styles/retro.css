@@ -43,26 +43,139 @@
 
 html {
   scroll-behavior: smooth;
-  background-color: var(--paper-bg);
+  background-color: #0c183a;
 }
 
 body {
   font-family: var(--font-editorial);
   color: var(--ink-black);
-  background-color: var(--paper-bg);
+  background-color: #0c183a;
   line-height: 1.5;
   overflow-x: hidden;
+  position: relative;
+  min-height: 100vh;
 }
 
-/* HALFTONE PRINT TEXTURE BACKGROUND */
-.halftone-bg {
+/* FULL-PAGE NIGHT TO DAY PIXEL SKY THEME */
+.fullpage-sky-bg {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: -1;
-  background-image: radial-gradient(var(--ink-black) 0.75px, transparent 0.75px);
-  background-size: 16px 16px;
-  opacity: 0.06;
+  overflow: hidden;
+  z-index: 0;
+  background: linear-gradient(90deg, #040814 0%, #0a1535 22%, #142f5e 45%, #225f9e 68%, #3692d4 85%, #56b5ee 100%);
+}
+
+.fullpage-stars-container {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 50%;
+  height: 100%;
+}
+
+.sky-star {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #fff475;
+  text-shadow: 0 0 5px rgba(255, 244, 117, 0.85);
+  user-select: none;
+  animation: star-twinkle 2.6s ease-in-out infinite alternate;
+}
+
+.star-9 { animation-delay: 0.6s; font-size: 12px; color: #ffffff; }
+.star-10 { animation-delay: 1.2s; font-size: 10px; color: #a2d2ff; }
+.star-11 { animation-delay: 1.7s; font-size: 13px; color: #ffe600; }
+.star-12 { animation-delay: 0.3s; font-size: 9px; color: #ffffff; }
+.star-13 { animation-delay: 2.1s; font-size: 11px; color: #a2d2ff; }
+
+.sky-dot {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: #ffffff;
+  box-shadow: 0 0 3px #ffffff;
+  animation: dot-flicker 2s infinite alternate;
+}
+
+.dot-9 { animation-delay: 0.4s; }
+.dot-10 { animation-delay: 1.5s; }
+.dot-11 { animation-delay: 0.8s; }
+.dot-12 { animation-delay: 1.8s; }
+
+.fullpage-clouds-container {
+  position: absolute;
+  left: 25%;
+  top: 0;
+  width: 45%;
+  height: 100%;
+}
+
+.sky-cloud {
+  position: absolute;
+  image-rendering: pixelated;
+  animation: cloud-drift 24s ease-in-out infinite alternate;
+}
+
+.cloud-pos-1 { left: 10%; top: 12%; animation-duration: 20s; }
+.cloud-pos-2 { left: 45%; top: 38%; animation-duration: 28s; }
+.cloud-pos-3 { left: 15%; top: 65%; animation-duration: 24s; }
+.cloud-pos-4 { left: 55%; top: 85%; animation-duration: 32s; }
+
+@keyframes cloud-drift {
+  0% { transform: translateX(0px); }
+  100% { transform: translateX(25px); }
+}
+
+.fullpage-birds-container {
+  position: absolute;
+  right: 4%;
+  top: 0;
+  width: 35%;
+  height: 100%;
+}
+
+.sky-bird {
+  position: absolute;
+  image-rendering: pixelated;
+  animation: bird-float 4s ease-in-out infinite alternate;
+}
+
+.bird-top-1 { right: 75%; top: 14%; animation-delay: 0s; }
+.bird-top-2 { right: 55%; top: 22%; animation-delay: 0.8s; }
+.bird-top-3 { right: 35%; top: 16%; animation-delay: 1.6s; }
+
+.bird-mid-1 { right: 65%; top: 48%; animation-delay: 0.5s; }
+.bird-mid-2 { right: 40%; top: 56%; animation-delay: 1.2s; }
+
+.bird-bot-1 { right: 70%; top: 78%; animation-delay: 0.3s; }
+.bird-bot-2 { right: 45%; top: 86%; animation-delay: 1.5s; }
+
+.fullpage-sun-container {
+  position: absolute;
+  right: 36px;
+  top: 48px;
+  image-rendering: pixelated;
+  z-index: 1;
+}
+
+.fullpage-sun-svg {
+  display: block;
+  filter: drop-shadow(0 0 16px rgba(255, 230, 0, 0.7));
+  animation: sun-pulse 3.5s ease-in-out infinite alternate;
+}
+
+.fullpage-dither-pattern {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px);
+  background-size: 4px 4px;
+}
+
+.app-editorial-layout {
+  position: relative;
+  z-index: 1;
 }
 
 /* TOP MAGAZINE MASTHEAD / ISSUE HEADER */

@@ -3,6 +3,7 @@ import { retroAudio } from './audio/retroSynth';
 import { InteractiveAppShowcase } from './components/InteractiveAppShowcase';
 import { CookieBanner } from './components/CookieBanner';
 import { NavbarSkyArt } from './components/NavbarSkyArt';
+import { FullPageSkyBackground } from './components/FullPageSkyBackground';
 import './styles/retro.css';
 
 type Lang = 'cs' | 'en';
@@ -234,8 +235,8 @@ export const App: React.FC = () => {
 
   return (
     <div className="print-magazine-root">
-      {/* HALFTONE PRINT TEXTURE */}
-      <div className="halftone-bg" />
+      {/* FULL-PAGE NIGHT TO DAY PIXEL SKY BACKGROUND */}
+      <FullPageSkyBackground />
 
       {/* COOKIE & HOSTING NOTICE BANNER */}
       <CookieBanner lang={lang} onOpenDetails={() => openModal('gdpr')} />
