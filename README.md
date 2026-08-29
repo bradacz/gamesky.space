@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-FFDD00.svg?style=flat-square&logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/mariantomay)
 
-> **Modern retro gaming workstation and deterministic DOSBox manager engineered specifically for macOS.**  
+> **Modern retro gaming workstation and simple DOSBox manager engineered specifically for macOS.**  
 > 100% direct 1-click launch, intelligent Virtual Drive Bay, authentic Sound Blaster 16 & Roland MT-32 synthesis, and bulletproof save state protection — zero terminal required.
 
 ---
