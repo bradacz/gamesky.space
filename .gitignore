@@ -32,3 +32,10 @@ Cargo.lock
 .env
 .env.*
 !.env.example
+!.env.release.example
+
+# Signing & Updater Private Keys
+*.key
+*.key.pub
+.tauri-keys/
+tauri-signer*

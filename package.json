@@ -7,9 +7,12 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "audit:archive": "node scripts/audit-archive-urls.mjs",
+    "release:keys": "node scripts/generate-minisign-keys.mjs",
     "release:macos": "./scripts/build-macos-release.sh",
     "release:verify": "./scripts/verify-macos-release.sh",
     "release:manifest": "node scripts/generate-update-manifest.mjs",
+    "release:bunny": "node scripts/deploy-bunny.mjs",
+    "release:deploy": "./scripts/build-macos-release.sh && node scripts/deploy-bunny.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },

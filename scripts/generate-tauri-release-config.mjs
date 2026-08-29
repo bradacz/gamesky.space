@@ -6,12 +6,16 @@ if (!outputPath || !publicKey) {
   throw new Error('GAMESKY_RELEASE_CONFIG_PATH and GAMESKY_UPDATER_PUBKEY are required.');
 }
 
+const cdnBase = (process.env.BUNNY_CDN_BASE_URL || 'https://cdn.gamesky.space').replace(/\/+$/, '');
+const endpoint = `${cdnBase}/releases/latest.json`;
+
 writeFileSync(outputPath, `${JSON.stringify({
   bundle: { createUpdaterArtifacts: true },
   plugins: {
     updater: {
       pubkey: publicKey,
-      endpoints: ['https://gamesky.space/releases/latest.json']
+      endpoints: [endpoint]
     }
   }
 }, null, 2)}\n`, { mode: 0o600 });
+

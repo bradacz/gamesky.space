@@ -9,11 +9,28 @@ fail() {
   exit 1
 }
 
-rustup target list --installed | grep -qx 'aarch64-apple-darwin' || fail 'Apple Silicon Rust target is missing.'
-rustup target list --installed | grep -qx 'x86_64-apple-darwin' || fail 'Intel Rust target is missing.'
+# Auto-load .env.release if present
+if [[ -f "$project_dir/.env.release" ]]; then
+  print 'Loading configuration from .env.release…'
+  set -a
+  source "$project_dir/.env.release"
+  set +a
+fi
+
+# Auto-detect Minisign keys from .tauri-keys/ if not set in environment
+if [[ -z ${TAURI_SIGNING_PRIVATE_KEY:-} && -f "$project_dir/.tauri-keys/updater.key" ]]; then
+  export TAURI_SIGNING_PRIVATE_KEY="$project_dir/.tauri-keys/updater.key"
+fi
+
+if [[ -z ${GAMESKY_UPDATER_PUBKEY:-} && -f "$project_dir/.tauri-keys/updater.key.pub" ]]; then
+  export GAMESKY_UPDATER_PUBKEY="$(cat "$project_dir/.tauri-keys/updater.key.pub" | tr -d '\r\n')"
+fi
+
+rustup target list --installed | grep -qx 'aarch64-apple-darwin' || fail 'Apple Silicon Rust target is missing (run: rustup target add aarch64-apple-darwin).'
+rustup target list --installed | grep -qx 'x86_64-apple-darwin' || fail 'Intel Rust target is missing (run: rustup target add x86_64-apple-darwin).'
 security find-identity -v -p codesigning | grep -q 'Developer ID Application' || fail 'No valid Developer ID Application identity is available in Keychain.'
-[[ -n ${TAURI_SIGNING_PRIVATE_KEY:-} ]] || fail 'TAURI_SIGNING_PRIVATE_KEY is not configured.'
-[[ -n ${GAMESKY_UPDATER_PUBKEY:-} ]] || fail 'GAMESKY_UPDATER_PUBKEY is not configured.'
+[[ -n ${TAURI_SIGNING_PRIVATE_KEY:-} ]] || fail 'TAURI_SIGNING_PRIVATE_KEY is not configured (run: npm run release:keys).'
+[[ -n ${GAMESKY_UPDATER_PUBKEY:-} ]] || fail 'GAMESKY_UPDATER_PUBKEY is not configured (run: npm run release:keys).'
 
 if [[ -z ${APPLE_API_ISSUER:-} || -z ${APPLE_API_KEY:-} || -z ${APPLE_API_KEY_PATH:-} ]]; then
   [[ -n ${APPLE_ID:-} && -n ${APPLE_PASSWORD:-} && -n ${APPLE_TEAM_ID:-} ]] \
@@ -33,3 +50,4 @@ dmg_path=$dmg_candidates[1]
 "$project_dir/scripts/verify-macos-release.sh" "$app_path" "$dmg_path"
 
 print "Release ready: $dmg_path"
+
