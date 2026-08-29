@@ -1,0 +1,20 @@
+# GameSky.space — Retro DOS Workstation for macOS
+
+> GameSky.space is an open-source, native macOS retro computing workstation and DOS game manager built with Rust 2021 and Tauri v2. It provides 1-click execution for classic MS-DOS games with zero manual configuration, EMS/XMS memory management, multi-engine emulation switching (DOSBox 0.74-3, DOSBox-Staging, DOSBox-X), Drive Bay ISO/Floppy mount, authentic Sound Blaster 16 & MT-32 audio, and 35 pre-curated FreeDOS titles.
+
+## Core Capabilities
+- **1-Click Game Launch**: No typing `mount c ~/games/doom`, no EMS memory crashes, no 8.3 filename collisions on APFS/macOS.
+- **Multi-Engine Switching**: Seamlessly switch between official DOSBox 0.74-3, modern DOSBox-Staging, and advanced DOSBox-X (including 3dfx Voodoo Glide emulation).
+- **Drive Bay**: 1-click mounting of CD-ROM ISO/BIN+CUE disk images and Floppy .IMG/.IMA images with multi-disc swap support.
+- **Hardware Lab Emulation**: Accurate Sound Blaster 16, OPL3 FM synthesis, Gravis UltraSound, Roland MT-32 MIDI, and CRT retro shaders.
+- **Modern macOS Integration**: Apple Silicon native (M1, M2, M3, M4) & Intel 64-bit universal binary, macOS 10.15+ (Catalina, Big Sur, Monterey, Ventura, Sonoma, Sequoia).
+- **100% Offline & Private**: Zero telemetry, no cloud required, 100% local execution.
+- **License**: MIT Open Source License.
+
+## Key URLs & Resources
+- Official Website: https://gamesky.space/
+- GitHub Repository: https://github.com/bradacz/gamesky.space
+- GitHub Releases & Download: https://github.com/bradacz/gamesky.space/releases
+- Community Discussions: https://github.com/bradacz/gamesky.space/discussions/1
+- Buy Me a Coffee: https://www.buymeacoffee.com/mariantomay
+- Full Technical Knowledge Base: https://gamesky.space/llms-full.txt

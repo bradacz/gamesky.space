@@ -1,0 +1,49 @@
+# GameSky.space — Complete Technical Documentation & AI Knowledge Base
+
+## 1. Product Overview
+GameSky.space is an advanced, native desktop workstation and retro gaming manager for macOS designed to run MS-DOS and early PC-compatible software with authentic hardware fidelity and modern convenience.
+
+- **Developer**: Marian Tomay (GitHub: @bradacz)
+- **Official Website**: https://gamesky.space/
+- **Source Code**: https://github.com/bradacz/gamesky.space
+- **License**: MIT License (emulation runtime interacts with GPLv2 DOSBox engines)
+- **Target OS**: macOS 10.15 Catalina through macOS 15 Sequoia (Universal Binary: arm64 Apple Silicon M1/M2/M3/M4 & x86_64 Intel)
+- **Tech Stack**: Rust 2021 edition (Backend & Process Management), Tauri v2 (macOS System IPC & Native Menus), React 18 & TypeScript (User Interface), Web Audio API (FM Synthesis & Sound FX).
+
+## 2. Technical Architecture & Features
+
+### 2.1 Emulation Engines
+GameSky.space decouples game configurations from engine binaries, allowing users to switch between three major DOSBox flavors per game profile:
+1. **DOSBox 0.74-3 (Official)**: Classic, rock-solid baseline compatibility for vintage DOS titles from 1981-1996.
+2. **DOSBox-Staging**: Modern fork optimized for high-refresh-rate displays, low audio latency, pixel-perfect scaling shaders, and modern controller mapping.
+3. **DOSBox-X**: Advanced emulator offering accurate PC-98 support, 3dfx Voodoo Glide emulation, Windows 95/98 guest OS capabilities, and low-level hardware debugging.
+
+### 2.2 Drive Bay (Virtual Storage Management)
+- **CD-ROM ISO & CUE/BIN**: Automatic mounting of CD audio tracks (Red Book Audio) and data tracks without requiring terminal command syntax.
+- **Multi-disc Swap**: Interactive hot-swapping for multi-CD RPGs and adventures (e.g. Wing Commander III, Phantasmagoria, Riven).
+- **Floppy Drive A: & B:**: Native support for 3.5" (1.44 MB, 720 KB) and 5.25" (1.2 MB, 360 KB) .IMG and .IMA disk images.
+- **Save State Protection**: Automatic non-destructive save file isolation, preventing file corruption when updating emulators.
+
+### 2.3 Audio & Visual Synthesis
+- **Sound Blaster 16 & Pro**: Direct DSP emulation at 44.1 kHz 16-bit stereo.
+- **Yamaha YMF262 (OPL3 FM Synthesis)**: Authentic AdLib / Sound Blaster FM music with configurable dual-operator / four-operator modes.
+- **Roland MT-32 & General MIDI**: Intelligent MPU-401 emulation with SoundFont and Roland MT-32 ROM mapping.
+- **Gravis UltraSound (GUS)**: Wavetable sound support with authentic interwave patch sets.
+- **CRT Shader Pipeline**: Scanlines, phosphorescent mask glow, aperture grille simulation, and 4:3 aspect ratio preservation.
+
+## 3. Frequently Asked Questions (FAQ)
+
+### Q: How do I run DOS games on macOS without terminal commands?
+A: Download GameSky.space DMG, move it to your Applications folder, and launch it. You can drag and drop any DOS game folder or ISO into the window, select your sound card, and double-click to play.
+
+### Q: Is GameSky.space free and open source?
+A: Yes, GameSky.space is 100% free and open-source software licensed under the MIT License, with code hosted openly on GitHub.
+
+### Q: Does GameSky.space support Apple Silicon Macs (M1, M2, M3, M4)?
+A: Yes, GameSky.space is compiled natively as an Apple Silicon universal binary, providing maximum performance and battery efficiency without Rosetta translation overhead.
+
+### Q: How does GameSky handle multi-disc games?
+A: GameSky includes a Drive Bay manager that allows you to pre-queue disc images (Disc 1, Disc 2, Disc 3) and switch discs during gameplay with a single shortcut (Ctrl+F4).
+
+### Q: Does GameSky require an active internet connection?
+A: No, GameSky is 100% offline-ready. It includes 35 pre-configured FreeDOS games and stores all configurations and saves locally on your Mac.
