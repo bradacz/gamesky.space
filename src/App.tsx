@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { retroAudio } from './audio/retroSynth';
 import { InteractiveAppShowcase } from './components/InteractiveAppShowcase';
 import { CookieBanner } from './components/CookieBanner';
+import { NavbarSkyArt } from './components/NavbarSkyArt';
 import './styles/retro.css';
 
 type Lang = 'cs' | 'en';
@@ -249,6 +250,9 @@ export const App: React.FC = () => {
 
       {/* 2. MAIN EDITORIAL NAVBAR */}
       <nav className="editorial-navbar">
+        {/* Night to Day Pixel Sky Canvas */}
+        <NavbarSkyArt />
+
         <a href="#hero" className="navbar-brand-badge">
           <img src="/app-icon.png" alt="GameSky Logo" className="brand-logo-img" />
           <div className="brand-logo-text">GameSky<span>.space</span></div>
