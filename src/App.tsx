@@ -555,63 +555,60 @@ export const App: React.FC = () => {
         </div>
       </section>
 
-      {/* 7. UNIFIED MODULAR EDITORIAL FOOTER */}
+      {/* 7. UNIFIED COMPACT EDITORIAL FOOTER */}
       <footer className="editorial-footer">
         {/* Night to Day Pixel Sky Canvas */}
         <NavbarSkyArt />
 
         <div className="footer-container">
-          <div className="footer-modular-grid">
-            {/* Module 1: Supported DOSBox Versions */}
-            <div className="footer-module-card">
-              <div className="footer-module-title">
+          <div className="footer-compact-grid">
+            {/* Block 1: Supported DOSBox Versions */}
+            <div className="footer-compact-card">
+              <div className="footer-compact-title">
                 {t.footerBlock1Title}
               </div>
-              <div className="footer-module-list">
+              <div className="footer-compact-chips">
                 <a
                   href="https://www.dosbox.com"
                   target="_blank"
                   rel="noreferrer"
-                  className="footer-item-link"
+                  className="footer-chip-link"
                 >
                   <span>🕹️</span>
                   <span>DOSBox 0.74-3</span>
-                  <span className="footer-item-tag">Official</span>
                 </a>
                 <a
                   href="https://dosbox-staging.github.io"
                   target="_blank"
                   rel="noreferrer"
-                  className="footer-item-link"
+                  className="footer-chip-link"
                 >
                   <span>⚡</span>
-                  <span>DOSBox Staging</span>
-                  <span className="footer-item-tag">Modern</span>
+                  <span>Staging</span>
                 </a>
                 <a
                   href="https://dosbox-x.com"
                   target="_blank"
                   rel="noreferrer"
-                  className="footer-item-link"
+                  className="footer-chip-link"
                 >
                   <span>💻</span>
                   <span>DOSBox-X</span>
-                  <span className="footer-item-tag">Advanced</span>
                 </a>
               </div>
             </div>
 
-            {/* Module 2: Network & Partners */}
-            <div className="footer-module-card">
-              <div className="footer-module-title">
+            {/* Block 2: Partner Links */}
+            <div className="footer-compact-card">
+              <div className="footer-compact-title">
                 {t.footerBlock2Title}
               </div>
-              <div className="footer-module-list">
+              <div className="footer-compact-chips">
                 <a
                   href="https://loftp.space"
                   target="_blank"
                   rel="noreferrer"
-                  className="footer-item-link"
+                  className="footer-chip-link"
                 >
                   <span>🪐</span>
                   <span>loftp.space</span>
@@ -620,7 +617,7 @@ export const App: React.FC = () => {
                   href="https://l-cms.site"
                   target="_blank"
                   rel="noreferrer"
-                  className="footer-item-link"
+                  className="footer-chip-link"
                 >
                   <span>⚡</span>
                   <span>l-cms.site</span>
@@ -629,7 +626,7 @@ export const App: React.FC = () => {
                   href="https://fitrepairstudio.site"
                   target="_blank"
                   rel="noreferrer"
-                  className="footer-item-link"
+                  className="footer-chip-link"
                 >
                   <span>🛠️</span>
                   <span>fitrepairstudio.site</span>
@@ -638,7 +635,7 @@ export const App: React.FC = () => {
                   href="https://promethe.fun"
                   target="_blank"
                   rel="noreferrer"
-                  className="footer-item-link"
+                  className="footer-chip-link"
                 >
                   <span>🎮</span>
                   <span>promethe.fun</span>
@@ -646,22 +643,22 @@ export const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Module 3: Legal & Open-Source */}
-            <div className="footer-module-card">
-              <div className="footer-module-title">
+            {/* Block 3: Legal & Info */}
+            <div className="footer-compact-card">
+              <div className="footer-compact-title">
                 {t.footerBlock3Title}
               </div>
-              <div className="footer-module-list">
+              <div className="footer-compact-chips">
                 <button
                   onClick={() => openModal('gdpr')}
-                  className="footer-item-link"
+                  className="footer-chip-link"
                 >
                   <span>🔒</span>
                   <span>{t.footerGdpr}</span>
                 </button>
                 <button
                   onClick={() => openModal('license')}
-                  className="footer-item-link"
+                  className="footer-chip-link"
                 >
                   <span>📜</span>
                   <span>{t.footerLicenseLink}</span>
@@ -670,19 +667,18 @@ export const App: React.FC = () => {
                   href="https://github.com/bradacz/gamesky.space"
                   target="_blank"
                   rel="noreferrer"
-                  className="footer-item-link"
+                  className="footer-chip-link"
                 >
                   <span>🐙</span>
-                  <span>GitHub Repozitář</span>
+                  <span>GitHub</span>
                 </a>
               </div>
             </div>
           </div>
 
-          <hr className="footer-bottom-divider" />
-
-          {/* Footer Language Switcher */}
-          <div style={{ display: 'flex', justifyContent: 'center', margin: '0 auto 16px' }}>
+          {/* Bottom Compact Single Strip */}
+          <div className="footer-bottom-strip">
+            {/* Language Switcher */}
             <div className="lang-switcher-box">
               <button
                 className={`btn-lang-toggle ${lang === 'cs' ? 'lang-active' : ''}`}
@@ -700,18 +696,18 @@ export const App: React.FC = () => {
                 🇬🇧 EN
               </button>
             </div>
-          </div>
 
-          {/* License Note & Copyright */}
-          <p className="footer-license-note">
-            {t.footerLicenseNote}
-          </p>
+            {/* Center Copyright & Summary */}
+            <div className="footer-strip-center">
+              <p className="footer-license-note">
+                {t.footerLicenseNote}
+              </p>
+              <p className="footer-editorial-copy">
+                {t.footerCopy}
+              </p>
+            </div>
 
-          <p className="footer-editorial-copy">
-            {t.footerCopy}
-          </p>
-
-          <div className="footer-sublink-row">
+            {/* Right Sublink */}
             <a
               href="https://www.mylocalio.com"
               target="_blank"
