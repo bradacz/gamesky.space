@@ -10,7 +10,7 @@ interface Hotspot {
   tag: string;
 }
 
-const HOTSPOTS: Hotspot[] = [
+const HOTSPOTS_CLASSIC: Hotspot[] = [
   {
     id: 'library',
     x: 18,
@@ -68,6 +68,64 @@ const HOTSPOTS: Hotspot[] = [
   },
 ];
 
+const HOTSPOTS_NEON: Hotspot[] = [
+  {
+    id: 'fkeys',
+    x: 50,
+    y: 91,
+    tag: 'NORTON COMMANDER BAR',
+    title: { cs: 'Funkční F1–F10 Klávesy', en: 'F1–F10 Commander Hotkeys' },
+    desc: {
+      cs: 'Autentická spodní lišta v retro DOS stylu pro bleskový import, správu katalogu a spouštění her.',
+      en: 'Authentic retro DOS bottom bar for instant import, catalog management, and fast execution.',
+    },
+  },
+  {
+    id: 'profile',
+    x: 48,
+    y: 52,
+    tag: 'WOLFENSTEIN 3D',
+    title: { cs: 'Detailní Profil & Box Art', en: 'Game Profile & Box Art' },
+    desc: {
+      cs: 'Přímá vazba na spustitelný EXE soubor, vysoké rozlišení obalu a statistiky spuštění.',
+      en: 'Direct link to the game executable, high-res vintage box art, and launch statistics.',
+    },
+  },
+  {
+    id: 'quicktools',
+    x: 32,
+    y: 17,
+    tag: 'CYBER TOOLBAR',
+    title: { cs: 'Nástroje & Import z Disku [A:]', en: 'Tools & Disk Import [A:]' },
+    desc: {
+      cs: 'Rychlé operace pro přidání hry [+], import z mechaniky [A:], správu uložených pozic [S] a katalog [@].',
+      en: 'Fast actions for adding games [+], mounting physical disks [A:], save states [S], and catalog [@].',
+    },
+  },
+  {
+    id: 'drivebay_neon',
+    x: 81,
+    y: 30,
+    tag: 'DRIVES & MEDIA',
+    title: { cs: 'Disketová & CD-ROM Jednotka', en: 'Floppy & CD-ROM Bay' },
+    desc: {
+      cs: 'Správa Floppy A: a CD-ROM D: s tlačítky Browse, Image a okamžitým vysunutím (Eject).',
+      en: 'Direct management of Floppy A: and CD-ROM D: with Browse, Disc Image, and Eject actions.',
+    },
+  },
+  {
+    id: 'hardware_neon',
+    x: 81,
+    y: 69,
+    tag: 'DOSBOX HARDWARE LAB',
+    title: { cs: 'CPU 10 000 Cyklů & SB16', en: 'CPU 10,000 Cycles & SB16' },
+    desc: {
+      cs: 'Posuvník 8088 až Pentium, VGA 320x200 škálování a SoundBlaster 16 s MIDI a zeleným RUN tlačítkem.',
+      en: '8088 to Pentium slider, VGA 320x200 scaler, and SoundBlaster 16 with MIDI and big green Run button.',
+    },
+  },
+];
+
 interface InteractiveAppShowcaseProps {
   lang: 'cs' | 'en';
   topBarText: string;
@@ -80,9 +138,13 @@ export const InteractiveAppShowcase: React.FC<InteractiveAppShowcaseProps> = ({
   captionText,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [theme, setTheme] = useState<'classic' | 'neon'>('classic');
   const [transform, setTransform] = useState<string>('perspective(1200px) rotateX(0deg) rotateY(0deg)');
   const [spotlight, setSpotlight] = useState<{ x: number; y: number; opacity: number }>({ x: 0, y: 0, opacity: 0 });
   const [activeHotspot, setActiveHotspot] = useState<Hotspot | null>(null);
+
+  const activeHotspots = theme === 'classic' ? HOTSPOTS_CLASSIC : HOTSPOTS_NEON;
+  const currentImage = theme === 'classic' ? '/app-screenshot.png' : '/app-screenshot-alt.png';
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const el = containerRef.current;
@@ -113,6 +175,13 @@ export const InteractiveAppShowcase: React.FC<InteractiveAppShowcaseProps> = ({
     setActiveHotspot(activeHotspot?.id === h.id ? null : h);
   };
 
+  const handleThemeSwitch = (newTheme: 'classic' | 'neon') => {
+    if (newTheme === theme) return;
+    retroAudio.playSwitchClick(newTheme === 'neon');
+    setTheme(newTheme);
+    setActiveHotspot(null);
+  };
+
   return (
     <div
       ref={containerRef}
@@ -125,22 +194,51 @@ export const InteractiveAppShowcase: React.FC<InteractiveAppShowcaseProps> = ({
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
-      {/* Top Window Bar */}
+      {/* Top Window Bar with Traffic Lights & Retro Theme Switcher */}
       <div className="screenshot-top-bar">
         <div className="screenshot-traffic-lights">
           <span className="screenshot-t-dot s-red" />
           <span className="screenshot-t-dot s-yellow" />
           <span className="screenshot-t-dot s-green" />
         </div>
-        <span>{topBarText}</span>
-        <span style={{ color: '#00ff66' }}>● LIVE INTERACTIVE VIEW</span>
+
+        {/* Alternative Look Toggle Selector */}
+        <div className="showcase-theme-switcher" role="tablist">
+          <button
+            type="button"
+            className={`theme-switch-pill ${theme === 'classic' ? 'theme-active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleThemeSwitch('classic');
+            }}
+          >
+            <span>🕹️</span>
+            <span>{lang === 'cs' ? 'Klasický vzhled' : 'Classic Workstation'}</span>
+          </button>
+          <button
+            type="button"
+            className={`theme-switch-pill ${theme === 'neon' ? 'theme-active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleThemeSwitch('neon');
+            }}
+          >
+            <span>⚡</span>
+            <span>{lang === 'cs' ? 'Cyber Commander' : 'Cyber Commander'}</span>
+          </button>
+        </div>
+
+        <span className="showcase-live-badge">
+          ● {theme === 'classic' ? topBarText : (lang === 'cs' ? 'CYBER COMMANDER EDICE' : 'CYBER COMMANDER EDITION')}
+        </span>
       </div>
 
       {/* Main Image Container with Hotspots */}
       <div className="screenshot-img-wrapper" style={{ position: 'relative', overflow: 'hidden' }}>
         <img
-          src="/app-screenshot.png"
-          alt="GameSky.space macOS App Screenshot"
+          key={theme}
+          src={currentImage}
+          alt={theme === 'classic' ? 'GameSky.space Classic Workstation' : 'GameSky.space Cyber Commander Edition'}
           className="screenshot-img-fluid"
         />
 
@@ -162,7 +260,7 @@ export const InteractiveAppShowcase: React.FC<InteractiveAppShowcaseProps> = ({
         <div className="laser-scan-line" />
 
         {/* Interactive Hotspots Pins */}
-        {HOTSPOTS.map((h) => {
+        {activeHotspots.map((h) => {
           const isActive = activeHotspot?.id === h.id;
           return (
             <div
@@ -200,7 +298,11 @@ export const InteractiveAppShowcase: React.FC<InteractiveAppShowcaseProps> = ({
       </div>
 
       <div className="screenshot-caption-tag">
-        {captionText}
+        {theme === 'classic'
+          ? captionText
+          : (lang === 'cs'
+              ? '📸 ALTERNATIVNÍ CYBER COMMANDER VZHLED S NORTON COMMANDER LIŠTOU (F1–F10) A RYCHLÝM OVLÁDÁNÍM'
+              : '📸 ALTERNATIVE CYBER COMMANDER DARK THEME WITH NORTON COMMANDER F1–F10 BOTTOM BAR')}
       </div>
     </div>
   );
