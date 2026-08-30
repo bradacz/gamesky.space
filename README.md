@@ -26,7 +26,22 @@
 - **🔒 Save Vault & Sandbox Checkpoints:** Recursive folder scanning and isolated backups prevent your hard-earned progress and game saves from being overwritten during reinstalls.
 - **📺 VGA Scaler Engine:** Built-in presets for `normal2x`, `normal3x`, `advmame2x`, `hq2x`, and 4:3 aspect-ratio correction optimized for high-DPI Retina and UltraWide displays.
 - **🌐 FreeDOS 1.4 Catalog:** 35 legal, license-verified open-source packages with automated CRC32 checksum verification.
+- **🎮 ScummVM Games:** Adventure titles that run on ScummVM instead of DOSBox are detected and launched too, including GOG's macOS releases, which carry their own engine.
 - **🦀 Rust & Tauri v2 Core:** Instant application boot, near-zero RAM footprint, and 100% native execution on Apple Silicon (M1/M2/M3/M4) and Intel Macs.
+
+### Optional: unpacking Windows installers
+
+ZIP archives and macOS `.pkg` releases unpack out of the box. Unpacking **Inno
+Setup installers** — the format GOG and OldGames.sk use for their Windows
+builds — needs `innoextract`, which is not bundled:
+
+```bash
+brew install innoextract     # GOG / OldGames.sk installers
+brew install sevenzip        # optional, for 7z and RAR archives
+```
+
+The Library Folder view says so when a tool is missing, rather than failing at
+unpack time.
 
 ---
 

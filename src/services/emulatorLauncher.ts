@@ -72,6 +72,13 @@ export class EmulatorLauncher {
     ];
   }
 
+  /** Extractors that are not installed; Inno Setup packages need innoextract. */
+  public static async missingUnpackTools(): Promise<string[]> {
+    if (!this.isTauriEnvironment()) return [];
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<string[]>('missing_unpack_tools').catch(() => []);
+  }
+
   public static async scanLibraryEntries(baseDir: string): Promise<import('../types').LibraryEntry[]> {
     if (!this.isTauriEnvironment()) return [];
     const { invoke } = await import('@tauri-apps/api/core');

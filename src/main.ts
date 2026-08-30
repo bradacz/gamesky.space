@@ -390,7 +390,10 @@ async function initializeNativeLibrary() {
   games = deduped;
 
   // 2. Synchronize with newly discovered items
+  const ignoredFolders = new Set(prefs.ignoredFolders || []);
   for (const installed of discovered) {
+    // A game the user deleted must not reappear just because its files remain.
+    if (ignoredFolders.has(installed.targetFolder)) continue;
     const slug = installed.title.toLowerCase().replace(/[^a-z0-9]+/g, '');
     const existingIndex = games.findIndex(
       g => g.title.toLowerCase().replace(/[^a-z0-9]+/g, '') === slug
@@ -1255,6 +1258,12 @@ function showExecutablePicker(
   el.modalPostInstall.classList.add('open');
 }
 
+/** Whether a path sits in the folder the startup scan walks. */
+function isInsideLibraryFolder(path: string): boolean {
+  const base = (prefs.defaultCDrive || '~/DOSGAMES').replace(/\/+$/, '');
+  return path === base || path.startsWith(`${base}/`);
+}
+
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
   if (bytes >= 1024 ** 2) return `${Math.round(bytes / 1024 ** 2)} MB`;
@@ -1285,7 +1294,16 @@ async function renderLibraryManager(baseDir: string) {
     return;
   }
 
+  const missingTools = await EmulatorLauncher.missingUnpackTools();
   el.libraryManagerList.innerHTML = '';
+  if (missingTools.includes('innoextract') && entries.some(e => e.kind === 'archive')) {
+    const notice = document.createElement('div');
+    notice.className = 'preset-empty';
+    notice.style.marginBottom = '6px';
+    notice.textContent =
+      '⚠️ innoextract is not installed, so GOG and OldGames.sk installers cannot be unpacked. Install it with: brew install innoextract';
+    el.libraryManagerList.appendChild(notice);
+  }
   for (const entry of entries) {
     // Adding a ScummVM game stores the folder ScummVM reported, which sits
     // inside the entry we scanned, so an exact match is not enough.
@@ -1293,6 +1311,7 @@ async function renderLibraryManager(baseDir: string) {
       const stored = g.drives.cDrivePath;
       return stored === entry.path || stored.startsWith(`${entry.path}/`);
     });
+    const isIgnored = (prefs.ignoredFolders || []).includes(entry.path);
     const icon = entry.kind === 'archive' ? '📦'
       : entry.kind === 'scummvm' ? '🎮'
       : entry.kind === 'game' ? '💾'
@@ -1304,7 +1323,7 @@ async function renderLibraryManager(baseDir: string) {
     row.innerHTML = `
       <div>
         <strong>${icon} ${escapeHtml(entry.title)}</strong>
-        ${inLibrary ? ' <span style="opacity:0.7">(in library)</span>' : ''}
+        ${inLibrary ? ' <span style="opacity:0.7">(in library)</span>' : ''}${isIgnored ? ' <span style="opacity:0.7">(hidden)</span>' : ''}
         <small style="display:block; opacity:0.8;">${escapeHtml(entry.detail)}${entry.sizeBytes > 0 ? ` · ${formatBytes(entry.sizeBytes)}` : ''}</small>
       </div>
     `;
@@ -1322,8 +1341,14 @@ async function renderLibraryManager(baseDir: string) {
     } else if ((entry.kind === 'game' || entry.kind === 'scummvm') && !inLibrary) {
       const add = document.createElement('button');
       add.className = 'btn-3d';
-      add.textContent = 'Add';
-      add.addEventListener('click', () => void addFromLibraryManager(entry, baseDir));
+      add.textContent = isIgnored ? 'Unhide' : 'Add';
+      add.addEventListener('click', () => {
+        if (isIgnored) {
+          prefs.ignoredFolders = (prefs.ignoredFolders || []).filter(p => p !== entry.path);
+          StorageService.savePreferences(prefs);
+        }
+        void addFromLibraryManager(entry, baseDir);
+      });
       actions.appendChild(add);
     }
 
@@ -1374,6 +1399,17 @@ async function addFromLibraryManager(entry: import('./types').LibraryEntry, base
 async function unpackFromLibraryManager(entry: import('./types').LibraryEntry, baseDir: string) {
   soundFX.playButtonClick();
   const target = `${baseDir}/${entry.suggestedFolder || 'GAME'}`;
+
+  // Unpacking merges into the target and replaces files that clash, so an
+  // occupied folder must be the user's decision, not a surprise.
+  const occupied = games.some(g => g.drives.cDrivePath === target)
+    || (await EmulatorLauncher.scanLibraryEntries(baseDir))
+      .some(e => e.path === target && e.kind !== 'empty');
+  if (occupied && !confirm(
+    `"${target}" already contains files.\n\nUnpacking here replaces any file with the same name, which can overwrite an installed game and its saves.\n\nContinue?`
+  )) {
+    return;
+  }
   const archivePath = entry.kind === 'archive' && entry.executable && entry.executable !== entry.name
     ? `${entry.path}/${entry.executable}`
     : entry.path;
@@ -2111,14 +2147,25 @@ function setupEvents() {
   el.tbDeleteGame.addEventListener('click', () => {
     const game = getSelectedGame();
     if (!game) return;
-    if (confirm(`Delete "${game.title}" from library?`)) {
-      soundFX.playButtonClick();
-      games = games.filter(g => g.id !== game.id);
-      selectedGameId = games.length > 0 ? games[0].id : null;
-      StorageService.saveGames(games);
-      renderGameList();
-      renderSelectedGame();
+    if (!confirm(`Delete "${game.title}" from library?`)) return;
+    soundFX.playButtonClick();
+
+    // The startup scan rediscovers folders in the library directory, so a
+    // deletion only sticks if we remember not to add this one back. Files on
+    // disk are never touched.
+    const folder = game.drives.cDrivePath;
+    if (folder && isInsideLibraryFolder(folder)) {
+      const ignored = new Set(prefs.ignoredFolders || []);
+      ignored.add(folder);
+      prefs.ignoredFolders = [...ignored];
+      StorageService.savePreferences(prefs);
     }
+
+    games = games.filter(g => g.id !== game.id);
+    selectedGameId = games.length > 0 ? games[0].id : null;
+    StorageService.saveGames(games);
+    renderGameList();
+    renderSelectedGame();
   });
 
   el.tbSoundToggle.addEventListener('click', () => {

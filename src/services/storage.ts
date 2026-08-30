@@ -16,6 +16,8 @@ export interface AppPreferences {
   checkForUpdates: boolean;
   customNortonCommanderPath?: string;
   deleteArchiveAfterUnpack?: boolean;
+  /** Folders in the library directory the startup scan must not re-add. */
+  ignoredFolders?: string[];
 }
 
 export interface NativeDatabaseStatus {
@@ -136,7 +138,8 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   automaticArtwork: true,
   checkForUpdates: true,
   customNortonCommanderPath: '',
-  deleteArchiveAfterUnpack: false
+  deleteArchiveAfterUnpack: false,
+  ignoredFolders: []
 };
 
 export class StorageService {

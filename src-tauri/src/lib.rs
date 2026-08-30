@@ -3230,6 +3230,37 @@ fn directory_size(path: &Path, depth: usize) -> u64 {
 
 /// Lists what actually sits in the library folder, classified, so the user can
 /// decide what belongs in the library instead of the scan guessing for them.
+/// Reports whether the external unpackers are present. Inno Setup packages
+/// (GOG, OldGames.sk) need innoextract, which is not bundled, so the UI can say
+/// so before a user tries and fails.
+#[tauri::command]
+fn missing_unpack_tools() -> Vec<String> {
+    let mut missing = Vec::new();
+    let has = |tool: &str| {
+        [
+            tool.to_string(),
+            format!("/opt/homebrew/bin/{tool}"),
+            format!("/usr/local/bin/{tool}"),
+            format!("/usr/bin/{tool}"),
+        ]
+        .iter()
+        .any(|bin| {
+            Command::new(bin)
+                .arg("--version")
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+        })
+    };
+    if !has("innoextract") {
+        missing.push("innoextract".to_string());
+    }
+    if !has("7z") && !has("7zz") && !has("7za") {
+        missing.push("sevenzip".to_string());
+    }
+    missing
+}
+
 #[tauri::command]
 fn scan_library_entries(base_dir: String) -> Result<Vec<LibraryEntry>, String> {
     let root = expand_home_path(base_dir.trim());
@@ -3986,6 +4017,7 @@ pub fn run() {
             cache_artwork,
             import_artwork_file,
             scan_library_entries,
+            missing_unpack_tools,
             detect_scummvm_game,
             launch_scummvm_command,
             open_catalog_source,
@@ -4876,5 +4908,19 @@ mod tests {
         assert!(!entry.suggested_folder.is_empty());
 
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn missing_tools_reflects_what_is_installed() {
+        let missing = missing_unpack_tools();
+        // innoextract is present on this machine, so it must not be reported.
+        let innoextract_present = ["/opt/homebrew/bin/innoextract", "/usr/local/bin/innoextract"]
+            .iter()
+            .any(|p| PathBuf::from(p).is_file());
+        assert_eq!(
+            missing.contains(&"innoextract".to_string()),
+            !innoextract_present,
+            "reported {missing:?} while innoextract present = {innoextract_present}"
+        );
     }
 }
