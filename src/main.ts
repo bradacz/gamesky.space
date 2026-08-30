@@ -2066,6 +2066,12 @@ function setupEvents() {
     renderPresetSuggestions(el.inputPresetSearch.value);
   });
 
+  // The detected game belongs to the folder it was found in; typing a
+  // different path invalidates it.
+  el.inputFolder.addEventListener('input', () => {
+    pendingScummvmGame = null;
+  });
+
   el.btnModalBrowseDir.addEventListener('click', async () => {
     const f = await EmulatorLauncher.browseForFolder('Select game folder on Mac');
     if (f) {

@@ -102,11 +102,7 @@ export function generateDosboxConf(game: GameProfile, options?: GenerateConfOpti
       lowerCd.endsWith('.mds') ||
       lowerCd.endsWith('.mdf') ||
       lowerCd.endsWith('.ins');
-    // Raw-sector images (CUE sheets, GOG's .ins) need an explicit filesystem;
-    // without it DOSBox reads the sector layout as the volume and games that
-    // probe the disc report it as missing.
-    const needsIsoFs =
-      lowerCd.endsWith('.cue') || lowerCd.endsWith('.ins') || lowerCd.endsWith('.bin');
+    const needsIsoFs = needsExplicitIsoFilesystem(lowerCd);
     const fallbackLabel =
       game.title.replace(/[^a-zA-Z0-9]/g, ' ').trim().split(/\s+/)[0]?.toUpperCase() || 'ALBION';
     const labelArg = drives.cdRomLabel && drives.cdRomLabel.trim() !== ''
@@ -137,12 +133,17 @@ export function generateDosboxConf(game: GameProfile, options?: GenerateConfOpti
       items.forEach((item, index) => {
         const letter = String.fromCharCode(baseCode + index).toLowerCase();
         const mountType = kind === 'floppy' ? 'floppy' : 'iso';
-        autoexecLines.push(`imgmount ${letter} "${escapePath(item.path)}" -t ${mountType}`);
+        const fsArg = kind !== 'floppy' && needsExplicitIsoFilesystem(item.path) ? ' -fs iso' : '';
+        autoexecLines.push(`imgmount ${letter} "${escapePath(item.path)}" -t ${mountType}${fsArg}`);
       });
     } else {
       const paths = items.map(item => `"${escapePath(item.path)}"`).join(' ');
       const mountType = kind === 'floppy' ? 'floppy' : 'iso';
-      autoexecLines.push(`imgmount ${baseLetter} ${paths} -t ${mountType}`);
+      const fsArg =
+        kind !== 'floppy' && items.some(item => needsExplicitIsoFilesystem(item.path))
+          ? ' -fs iso'
+          : '';
+      autoexecLines.push(`imgmount ${baseLetter} ${paths} -t ${mountType}${fsArg}`);
     }
   }
 
@@ -302,6 +303,16 @@ ${autoexecLines.join('\n')}
 `.trim();
 
   return confContent;
+}
+
+/**
+ * Raw-sector images (CUE sheets, GOG's .ins, bare .bin) need an explicit
+ * filesystem; without it DOSBox reads the sector layout as the volume and
+ * games that probe the disc report it as missing.
+ */
+function needsExplicitIsoFilesystem(path: string): boolean {
+  const lower = path.toLowerCase();
+  return lower.endsWith('.cue') || lower.endsWith('.ins') || lower.endsWith('.bin');
 }
 
 function escapePath(p: string): string {

@@ -1474,10 +1474,52 @@ fn find_gog_autoexec_executable(root: &Path) -> Option<String> {
     None
 }
 
-/// Strips Windows-installer scaffolding that innoextract emits but DOSBox never
-/// reads, so executable detection isn't misled by it.
+/// Moves everything from `source` into `destination`, merging directories and
+/// replacing files that already exist. Used where one tree has to be folded
+/// into another without losing either side's extra content.
+fn merge_directory_into(source: &Path, destination: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(destination)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let from = entry.path();
+        let to = destination.join(entry.file_name());
+        if from.is_dir() {
+            if to.is_file() {
+                fs::remove_file(&to)?;
+            }
+            merge_directory_into(&from, &to)?;
+            let _ = fs::remove_dir(&from);
+        } else {
+            if to.is_dir() {
+                fs::remove_dir_all(&to)?;
+            } else if to.exists() {
+                fs::remove_file(&to)?;
+            }
+            // rename fails across devices; fall back to copy.
+            if fs::rename(&from, &to).is_err() {
+                fs::copy(&from, &to)?;
+                let _ = fs::remove_file(&from);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Folds GOG's `app` payload into the game directory and removes the Windows
+/// installer scaffolding around it.
+///
+/// `app` is not scaffolding: GOG's own script installs it as supportData with
+/// `{supportDir}/app` -> `{app}`, and for some releases it carries live game
+/// state (Albion keeps `XLDLIBS/CURRENT` and `SAVES` only there). Deleting it
+/// would strip files the game needs, so it is merged in rather than dropped.
 fn prune_gog_installer_scaffolding(root: &Path) {
-    for name in ["tmp", "__redist", "commonappdata", "app"] {
+    let support_data = root.join("app");
+    if support_data.is_dir() {
+        if merge_directory_into(&support_data, root).is_ok() {
+            let _ = fs::remove_dir_all(&support_data);
+        }
+    }
+    for name in ["tmp", "__redist", "commonappdata"] {
         let path = root.join(name);
         if path.is_dir() {
             let _ = fs::remove_dir_all(&path);
@@ -1699,15 +1741,9 @@ fn extract_macos_pkg(archive: &Path, destination: &Path) -> Result<(), String> {
     find_game_dir(&unpacked, &mut game_root, 0);
     let source_root = game_root.unwrap_or(unpacked);
 
-    if let Ok(entries) = fs::read_dir(&source_root) {
-        for entry in entries.flatten() {
-            let target = destination.join(entry.file_name());
-            if !target.exists() {
-                let _ = fs::rename(entry.path(), &target);
-            }
-        }
-    }
+    let merged = merge_directory_into(&source_root, destination);
     let _ = fs::remove_dir_all(&staging);
+    merged.map_err(|e| format!("Failed to move the unpacked game into place: {e}"))?;
     Ok(())
 }
 
@@ -2739,7 +2775,7 @@ fn prepare_game_launch(
             discover_cd_media(&canonical_root).unwrap_or_default()
         };
 
-        harmonize_game_cd_config(&canonical_launch_dir);
+        harmonize_game_cd_config(&canonical_launch_dir, !prepared_cd_rom.is_empty());
 
         return Ok(PreparedGameLaunch {
             c_drive_path: effective_root.to_string_lossy().to_string(),
@@ -2786,7 +2822,7 @@ fn prepare_game_launch(
         discover_cd_media(&canonical_root).unwrap_or_default()
     };
 
-    harmonize_game_cd_config(&canonical_launch_dir);
+    harmonize_game_cd_config(&canonical_launch_dir, !prepared_cd_rom.is_empty());
 
     Ok(PreparedGameLaunch {
         c_drive_path: canonical_launch_dir.to_string_lossy().to_string(),
@@ -2855,37 +2891,62 @@ fn is_placeholder_cd_dir(dir: &Path) -> bool {
     file_count <= 2 && total_bytes < 100_000
 }
 
-fn harmonize_game_cd_config(launch_dir: &Path) {
-    if let Ok(entries) = fs::read_dir(launch_dir) {
-        for entry in entries.flatten() {
-            let p = entry.path();
-            if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
-                if ext.eq_ignore_ascii_case("ini") || ext.eq_ignore_ascii_case("cfg") {
-                    if let Ok(content) = fs::read_to_string(&p) {
-                        let mut modified = false;
-                        let mut new_lines = Vec::new();
-                        for line in content.lines() {
-                            let trimmed = line.trim();
-                            let upper = trimmed.to_uppercase();
-                            if upper.starts_with("SOURCE_PATH")
-                                || upper.starts_with("CD_PATH")
-                                || upper.starts_with("CDROM")
-                                || upper.starts_with("CD_DRIVE")
-                            {
-                                let key = trimmed.split('=').next().unwrap_or("SOURCE_PATH").trim();
-                                new_lines.push(format!("{} = D:\\", key));
-                                modified = true;
-                                continue;
-                            }
-                            new_lines.push(line.to_string());
-                        }
-                        if modified {
-                            let _ = fs::write(&p, new_lines.join("\r\n"));
-                        }
-                    }
-                }
-            }
+/// Points a game's own config at the CD we are about to mount as D:.
+///
+/// This rewrites files the user owns, so it is deliberately conservative:
+/// it only runs when a CD is actually being mounted, matches the CD-path keys
+/// exactly rather than by prefix (`CDROM_SPEED` is not a CD path), and keeps a
+/// one-time `.gamesky-backup` of the original so the shipped value can be
+/// recovered.
+fn harmonize_game_cd_config(launch_dir: &Path, cd_is_mounted: bool) {
+    if !cd_is_mounted {
+        return;
+    }
+    const CD_PATH_KEYS: [&str; 4] = ["SOURCE_PATH", "CD_PATH", "CDROM", "CD_DRIVE"];
+
+    let Ok(entries) = fs::read_dir(launch_dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let p = entry.path();
+        let Some(ext) = p.extension().and_then(|e| e.to_str()) else {
+            continue;
+        };
+        if !(ext.eq_ignore_ascii_case("ini") || ext.eq_ignore_ascii_case("cfg")) {
+            continue;
         }
+        let Ok(content) = fs::read_to_string(&p) else {
+            continue;
+        };
+
+        let mut modified = false;
+        let mut new_lines = Vec::new();
+        for line in content.lines() {
+            let trimmed = line.trim();
+            let key = trimmed.split('=').next().unwrap_or("").trim();
+            let is_cd_path = trimmed.contains('=')
+                && CD_PATH_KEYS
+                    .iter()
+                    .any(|candidate| key.eq_ignore_ascii_case(candidate));
+            if is_cd_path {
+                let replacement = format!("{key} = D:\\");
+                if line != replacement {
+                    modified = true;
+                }
+                new_lines.push(replacement);
+                continue;
+            }
+            new_lines.push(line.to_string());
+        }
+        if !modified {
+            continue;
+        }
+
+        let backup = p.with_extension(format!("{ext}.gamesky-backup"));
+        if !backup.exists() {
+            let _ = fs::copy(&p, &backup);
+        }
+        let _ = fs::write(&p, new_lines.join("\r\n"));
     }
 }
 
@@ -3352,16 +3413,46 @@ fn detect_scummvm_game(
         "ScummVM was not found. Install it or set its path in Configuration.".to_string()
     })?;
 
-    // --path must precede --detect; ScummVM ignores it otherwise. --recursive
-    // lets the user pick the folder they downloaded, not the data subfolder.
-    let output = Command::new(&binary)
-        .arg(format!("--path={}", dir.to_string_lossy()))
-        .arg("--recursive")
+    // Try the folder itself first: it is fast and unambiguous. Only if nothing
+    // is there do we recurse, so picking a game's own folder never pays for a
+    // full-tree scan.
+    let direct = run_scummvm_detect(&binary, &dir, false)?;
+    if direct.len() == 1 {
+        return Ok(direct.into_iter().next());
+    }
+    if direct.len() > 1 {
+        return Ok(None);
+    }
+
+    // A GOG release unpacks to a wrapper holding the data one level down, so
+    // recurse to find it. If several games turn up the folder is a library
+    // rather than one game, and guessing which to attach would be wrong.
+    let nested = run_scummvm_detect(&binary, &dir, true)?;
+    if nested.len() == 1 {
+        return Ok(nested.into_iter().next());
+    }
+    Ok(None)
+}
+
+/// Runs ScummVM's detector and parses its `ID  Description  Full Path` table.
+fn run_scummvm_detect(
+    binary: &Path,
+    dir: &Path,
+    recursive: bool,
+) -> Result<Vec<ScummvmGame>, String> {
+    // --path must precede --detect; ScummVM ignores it otherwise.
+    let mut command = Command::new(binary);
+    command.arg(format!("--path={}", dir.to_string_lossy()));
+    if recursive {
+        command.arg("--recursive");
+    }
+    let output = command
         .arg("--detect")
         .output()
         .map_err(|e| format!("Failed to run ScummVM: {e}"))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut found = Vec::new();
     for line in stdout.lines() {
         let trimmed = line.trim();
         if trimmed.is_empty()
@@ -3388,13 +3479,13 @@ fn detect_scummvm_game(
             .map(|c| c.trim().to_string())
             .filter(|p| !p.is_empty())
             .unwrap_or_else(|| dir.to_string_lossy().to_string());
-        return Ok(Some(ScummvmGame {
+        found.push(ScummvmGame {
             game_id: id,
             description,
             path,
-        }));
+        });
     }
-    Ok(None)
+    Ok(found)
 }
 
 #[tauri::command]
@@ -4224,6 +4315,114 @@ mod tests {
             PathBuf::from(&from_wrapper.path),
             game_dir,
             "the reported path should point at the data, not the folder searched"
+        );
+    }
+
+    #[test]
+    fn gog_support_data_is_merged_not_deleted() {
+        let root = std::env::temp_dir().join("gamesky_gog_prune_test");
+        let _ = fs::remove_dir_all(&root);
+        // Root ships XLDLIBS/INITIAL; app/ carries the live state GOG installs.
+        fs::create_dir_all(root.join("XLDLIBS").join("INITIAL")).unwrap();
+        fs::write(root.join("XLDLIBS").join("INITIAL").join("A.XLD"), b"x").unwrap();
+        fs::create_dir_all(root.join("app").join("XLDLIBS").join("CURRENT")).unwrap();
+        fs::write(
+            root.join("app").join("XLDLIBS").join("CURRENT").join("B.XLD"),
+            b"y",
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("app").join("SAVES")).unwrap();
+        for junk in ["tmp", "__redist", "commonappdata"] {
+            fs::create_dir_all(root.join(junk)).unwrap();
+        }
+
+        prune_gog_installer_scaffolding(&root);
+
+        // Support data survives, merged alongside what the root already had.
+        assert!(root.join("XLDLIBS").join("CURRENT").join("B.XLD").is_file());
+        assert!(root.join("XLDLIBS").join("INITIAL").join("A.XLD").is_file());
+        assert!(root.join("SAVES").is_dir());
+        assert!(!root.join("app").exists());
+        for junk in ["tmp", "__redist", "commonappdata"] {
+            assert!(!root.join(junk).exists(), "{junk} should be pruned");
+        }
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn merge_replaces_files_and_keeps_both_sides() {
+        let base = std::env::temp_dir().join("gamesky_merge_test");
+        let _ = fs::remove_dir_all(&base);
+        let src = base.join("src");
+        let dst = base.join("dst");
+        fs::create_dir_all(src.join("shared")).unwrap();
+        fs::create_dir_all(dst.join("shared")).unwrap();
+        fs::write(src.join("shared").join("new.txt"), b"new").unwrap();
+        fs::write(src.join("shared").join("clash.txt"), b"fresh").unwrap();
+        fs::write(dst.join("shared").join("old.txt"), b"old").unwrap();
+        fs::write(dst.join("shared").join("clash.txt"), b"stale").unwrap();
+
+        merge_directory_into(&src, &dst).unwrap();
+
+        assert_eq!(fs::read(dst.join("shared").join("old.txt")).unwrap(), b"old");
+        assert_eq!(fs::read(dst.join("shared").join("new.txt")).unwrap(), b"new");
+        // An existing file is replaced rather than silently skipped.
+        assert_eq!(
+            fs::read(dst.join("shared").join("clash.txt")).unwrap(),
+            b"fresh"
+        );
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn cd_config_rewrite_is_guarded_and_reversible() {
+        let dir = std::env::temp_dir().join("gamesky_harmonize_test");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let ini = dir.join("SETUP.INI");
+        let original = "[SYSTEM]\r\nSOURCE_PATH = C:\\ALBIONCD\\\r\nCDROM_SPEED=4\r\n";
+        fs::write(&ini, original).unwrap();
+
+        // With no CD mounted the user's file must be left exactly as it was.
+        harmonize_game_cd_config(&dir, false);
+        assert_eq!(fs::read_to_string(&ini).unwrap(), original);
+        assert!(!dir.join("SETUP.INI.gamesky-backup").exists());
+
+        harmonize_game_cd_config(&dir, true);
+        let rewritten = fs::read_to_string(&ini).unwrap();
+        assert!(rewritten.contains("SOURCE_PATH = D:\\"));
+        // A key that merely starts with CDROM is not a CD path.
+        assert!(
+            rewritten.contains("CDROM_SPEED=4"),
+            "unrelated key was corrupted: {rewritten}"
+        );
+        // The shipped value stays recoverable.
+        let backup = fs::read_to_string(dir.join("SETUP.INI.gamesky-backup")).unwrap();
+        assert!(backup.contains("C:\\ALBIONCD"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[ignore = "set GAMESKY_TEST_SCUMMVM and GAMESKY_TEST_AMBIGUOUS_DIR"]
+    fn ambiguous_folder_attaches_no_game() {
+        let (Ok(bin), Ok(dir)) = (
+            std::env::var("GAMESKY_TEST_SCUMMVM"),
+            std::env::var("GAMESKY_TEST_AMBIGUOUS_DIR"),
+        ) else {
+            return;
+        };
+        if !PathBuf::from(&dir).is_dir() {
+            return;
+        }
+        // Two games below the folder: picking either one would be a guess.
+        let rows = run_scummvm_detect(&PathBuf::from(&bin), &PathBuf::from(&dir), true).unwrap();
+        assert!(rows.len() > 1, "fixture should hold more than one game");
+        assert!(
+            detect_scummvm_game(bin, dir).unwrap().is_none(),
+            "an ambiguous folder must not silently attach one of the games"
         );
     }
 }
