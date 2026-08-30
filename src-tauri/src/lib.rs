@@ -3202,8 +3202,30 @@ pub struct LibraryEntry {
     pub title: String,
     pub executable: String,
     pub working_dir: String,
+    /// Total bytes on disk, walked for folders where metadata alone is the
+    /// directory record rather than its contents.
     pub size_bytes: u64,
+    /// Folder name to unpack an archive into, cleaned of installer noise.
+    pub suggested_folder: String,
     pub detail: String,
+}
+
+/// Adds up the bytes actually stored under `path`.
+fn directory_size(path: &Path, depth: usize) -> u64 {
+    if depth > 12 {
+        return 0;
+    }
+    let Ok(entries) = fs::read_dir(path) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .map(|entry| match entry.file_type() {
+            Ok(t) if t.is_dir() => directory_size(&entry.path(), depth + 1),
+            Ok(t) if t.is_file() => entry.metadata().map(|m| m.len()).unwrap_or(0),
+            _ => 0,
+        })
+        .sum()
 }
 
 /// Lists what actually sits in the library folder, classified, so the user can
@@ -3239,8 +3261,8 @@ fn scan_library_entries(base_dir: String) -> Result<Vec<LibraryEntry>, String> {
                     working_dir,
                     format!("Installed game, starts {executable}"),
                 ),
-                None if resolve_scummvm_binary("", &path).is_some()
-                    || path.join("game").is_dir() && resolve_scummvm_binary("", &path.join("game")).is_some() =>
+                None if bundled_scummvm_in(&path).is_some()
+                    || bundled_scummvm_in(&path.join("game")).is_some() =>
                 {
                     (
                         "scummvm",
@@ -3297,6 +3319,7 @@ fn scan_library_entries(base_dir: String) -> Result<Vec<LibraryEntry>, String> {
             }
         };
 
+        let suggested_folder = clean_game_package_folder_name(&name);
         listed.push(LibraryEntry {
             name,
             path: path.to_string_lossy().to_string(),
@@ -3304,7 +3327,12 @@ fn scan_library_entries(base_dir: String) -> Result<Vec<LibraryEntry>, String> {
             title: title.split_whitespace().collect::<Vec<_>>().join(" "),
             executable,
             working_dir,
-            size_bytes: entry.metadata().map(|m| m.len()).unwrap_or(0),
+            size_bytes: if file_type.is_dir() {
+                directory_size(&path, 0)
+            } else {
+                entry.metadata().map(|m| m.len()).unwrap_or(0)
+            },
+            suggested_folder,
             detail,
         });
     }
@@ -3527,19 +3555,23 @@ fn resolve_scummvm_binary(preferred: &str, game_dir: &Path) -> Option<PathBuf> {
     if !preferred.trim().is_empty() && configured.is_file() {
         return Some(configured);
     }
-    let relative = Path::new("scummvm")
+    // At launch the engine may sit beside the game, as GOG ships it.
+    bundled_scummvm_in(game_dir)
+        .or_else(|| game_dir.parent().and_then(bundled_scummvm_in))
+}
+
+/// Looks for a ScummVM bundled inside `root` only. Classification must not walk
+/// up: the parent of a library entry is the library folder itself, and an engine
+/// kept there would make every game in it look like a ScummVM release.
+fn bundled_scummvm_in(root: &Path) -> Option<PathBuf> {
+    let nested = root
+        .join("scummvm")
         .join("Contents")
         .join("MacOS")
         .join("scummvm");
-    let mut roots = vec![game_dir.to_path_buf()];
-    if let Some(parent) = game_dir.parent() {
-        roots.push(parent.to_path_buf());
-    }
-    for root in roots {
-        for candidate in [root.join(&relative), root.join("scummvm")] {
-            if candidate.is_file() {
-                return Some(candidate);
-            }
+    for candidate in [nested, root.join("scummvm")] {
+        if candidate.is_file() {
+            return Some(candidate);
         }
     }
     None
@@ -4794,6 +4826,54 @@ mod tests {
         assert_eq!(kind_of("RealGame"), "game");
         assert_eq!(kind_of("setup something"), "archive");
         assert_eq!(kind_of("NotUnpacked"), "archive");
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn engine_lookup_does_not_leak_into_sibling_folders() {
+        let root = std::env::temp_dir().join("gamesky_engine_scope_test");
+        let _ = fs::remove_dir_all(&root);
+        // A ScummVM kept in the library folder itself, next to unrelated games.
+        fs::create_dir_all(root.join("scummvm").join("Contents").join("MacOS")).unwrap();
+        fs::write(
+            root.join("scummvm").join("Contents").join("MacOS").join("scummvm"),
+            b"binary",
+        )
+        .unwrap();
+        let dos_game = root.join("Dune2");
+        fs::create_dir_all(&dos_game).unwrap();
+        fs::write(dos_game.join("DUNE2.EXE"), b"MZ").unwrap();
+
+        // Classification looks only inside the folder, so the DOS game is not
+        // mistaken for a ScummVM release because of its neighbour.
+        assert!(bundled_scummvm_in(&dos_game).is_none());
+        assert!(bundled_scummvm_in(&root).is_some());
+
+        // Launching still finds an engine sitting beside the game, as GOG ships it.
+        assert!(resolve_scummvm_binary("", &dos_game).is_some());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn library_entries_report_real_sizes_and_clean_folder_names() {
+        let root = std::env::temp_dir().join("gamesky_entry_meta_test");
+        let _ = fs::remove_dir_all(&root);
+        let game = root.join("BigGame");
+        fs::create_dir_all(game.join("DATA")).unwrap();
+        fs::write(game.join("PLAY.BAT"), b"@echo off").unwrap();
+        fs::write(game.join("DATA").join("blob.bin"), vec![0u8; 5000]).unwrap();
+
+        let listed = scan_library_entries(root.to_string_lossy().to_string()).unwrap();
+        let entry = listed.iter().find(|e| e.name == "BigGame").unwrap();
+        // Directory metadata alone would report the directory record, not 5 KB.
+        assert!(
+            entry.size_bytes >= 5000,
+            "folder size should count its contents, got {}",
+            entry.size_bytes
+        );
+        assert!(!entry.suggested_folder.is_empty());
 
         let _ = fs::remove_dir_all(&root);
     }

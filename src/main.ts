@@ -1255,6 +1255,13 @@ function showExecutablePicker(
   el.modalPostInstall.classList.add('open');
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  if (bytes >= 1024 ** 2) return `${Math.round(bytes / 1024 ** 2)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+}
+
 /** Shows what is in the games folder and what the library made of it. */
 async function openLibraryManager() {
   soundFX.playButtonClick();
@@ -1280,7 +1287,12 @@ async function renderLibraryManager(baseDir: string) {
 
   el.libraryManagerList.innerHTML = '';
   for (const entry of entries) {
-    const inLibrary = games.some(g => g.drives.cDrivePath === entry.path);
+    // Adding a ScummVM game stores the folder ScummVM reported, which sits
+    // inside the entry we scanned, so an exact match is not enough.
+    const inLibrary = games.some(g => {
+      const stored = g.drives.cDrivePath;
+      return stored === entry.path || stored.startsWith(`${entry.path}/`);
+    });
     const icon = entry.kind === 'archive' ? '📦'
       : entry.kind === 'scummvm' ? '🎮'
       : entry.kind === 'game' ? '💾'
@@ -1293,7 +1305,7 @@ async function renderLibraryManager(baseDir: string) {
       <div>
         <strong>${icon} ${escapeHtml(entry.title)}</strong>
         ${inLibrary ? ' <span style="opacity:0.7">(in library)</span>' : ''}
-        <small style="display:block; opacity:0.8;">${escapeHtml(entry.detail)}</small>
+        <small style="display:block; opacity:0.8;">${escapeHtml(entry.detail)}${entry.sizeBytes > 0 ? ` · ${formatBytes(entry.sizeBytes)}` : ''}</small>
       </div>
     `;
 
@@ -1361,7 +1373,7 @@ async function addFromLibraryManager(entry: import('./types').LibraryEntry, base
 
 async function unpackFromLibraryManager(entry: import('./types').LibraryEntry, baseDir: string) {
   soundFX.playButtonClick();
-  const target = `${baseDir}/${entry.title.replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'GAME'}`;
+  const target = `${baseDir}/${entry.suggestedFolder || 'GAME'}`;
   const archivePath = entry.kind === 'archive' && entry.executable && entry.executable !== entry.name
     ? `${entry.path}/${entry.executable}`
     : entry.path;

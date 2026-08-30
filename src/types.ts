@@ -184,5 +184,7 @@ export interface LibraryEntry {
   executable: string;
   workingDir: string;
   sizeBytes: number;
+  /** Folder name to unpack an archive into, cleaned of installer noise. */
+  suggestedFolder: string;
   detail: string;
 }
