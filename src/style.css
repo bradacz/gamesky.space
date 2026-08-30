@@ -1712,16 +1712,25 @@ body {
 }
 
 .game-detail-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 5px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
   margin-top: 7px;
 }
 
 .game-detail-actions .btn-3d {
-  min-height: 30px;
-  padding: 4px 6px;
-  font-size: 12px;
+  flex: 1 1 calc(33.333% - 4px);
+  min-width: 75px;
+  min-height: 26px;
+  padding: 3px 5px;
+  font-size: 11px;
+  font-family: var(--font-retro);
+  font-weight: bold;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
 }
 
 .feature-modal {
@@ -2501,3 +2510,584 @@ body.theme-norton .btn-run-dos {
 .preset-suggestion.executable-uninstaller,
 .preset-suggestion.executable-windows { opacity: .72; }
 .preset-empty { padding: 7px; color: #58687a; font: 12px var(--font-mono); }
+
+/* DOS File Manager & Installer Actions */
+.btn-secondary-launch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 8px;
+  font-family: var(--font-retro);
+  font-size: 13px;
+  font-weight: bold;
+  background: var(--win-btn-face, #c0c0c0);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.btn-secondary-launch:hover {
+  background: #d4d4d4;
+}
+
+.archive-action-banner {
+  animation: pulse-border 2s infinite;
+}
+@keyframes pulse-border {
+  0% { border-color: #d48800; }
+  50% { border-color: #faad14; }
+  100% { border-color: #d48800; }
+}
+
+.post-install-candidate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  margin-bottom: 3px;
+  background: #f5f5f5;
+  border: 1px solid #d9d9d9;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.post-install-candidate:hover,
+.post-install-candidate.selected {
+  background: #004080;
+  color: #ffffff;
+  border-color: #002b59;
+}
+
+
+/* ==========================================================================
+   APPLE LIGHT — clean white surfaces, hairline borders, SF system type.
+   Scoped to body.theme-apple; overrides the dark base layer's palette and the
+   rules in it that hardcode dark colors.
+   ========================================================================== */
+body.theme-apple {
+  --win-bg: #ffffff;
+  --win-light: #ffffff;
+  --win-shadow: rgba(0, 0, 0, 0.10);
+  --win-dark-shadow: rgba(0, 0, 0, 0.14);
+  --win-blue: #0071e3;
+  --win-blue-light: #2997ff;
+  --panel-blue: #ffffff;
+  --panel-blue-dark: #f5f5f7;
+  --dos-bright-green: #1d9e50;
+  --dos-yellow: #b25000;
+  --dos-red-btn: #0071e3;
+  --dos-red-hover: #0077ed;
+  --dos-green: #1d9e50;
+  --dos-cyan: #0071e3;
+  --win-btn-face: #ffffff;
+
+  --retro-bg: #f5f5f7;
+  --retro-surface: #ffffff;
+  --retro-surface-raised: #ffffff;
+  --retro-line: rgba(0, 0, 0, 0.11);
+  --retro-text: #1d1d1f;
+  --retro-muted: #6e6e73;
+  --retro-accent: #0071e3;
+  --retro-violet: #5e5ce6;
+
+  --font-title: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+  --font-retro: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-compact: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+
+  background: var(--retro-bg);
+  color: var(--retro-text);
+  font-family: var(--font-retro);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Chrome: flat white bars separated by hairlines instead of glow. */
+body.theme-apple .main-window {
+  border: 0;
+  background: transparent;
+}
+
+body.theme-apple .title-bar {
+  background: rgba(255, 255, 255, 0.85);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--retro-line);
+  color: var(--retro-text);
+  letter-spacing: 0.2px;
+  font-weight: 600;
+  text-shadow: none;
+}
+
+body.theme-apple .menu-bar {
+  background: rgba(255, 255, 255, 0.85);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--retro-line);
+}
+
+body.theme-apple .menu-item:hover {
+  background: rgba(0, 113, 227, 0.10);
+  color: var(--retro-accent);
+}
+
+body.theme-apple .toolbar {
+  background: rgba(255, 255, 255, 0.85);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--retro-line);
+}
+
+body.theme-apple .title-btn {
+  background: #ffffff;
+  border: 1px solid var(--retro-line);
+  color: var(--retro-muted);
+}
+
+/* Controls: pill buttons with a hairline, tinted on hover. */
+body.theme-apple .btn-3d,
+body.theme-apple .toolbar-btn {
+  border: 1px solid var(--retro-line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--retro-text);
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+body.theme-apple .btn-3d:hover,
+body.theme-apple .toolbar-btn:hover {
+  border-color: rgba(0, 113, 227, 0.55);
+  background: rgba(0, 113, 227, 0.07);
+  color: var(--retro-accent);
+}
+
+body.theme-apple .btn-3d:active,
+body.theme-apple .toolbar-btn:active {
+  border: 1px solid rgba(0, 113, 227, 0.65);
+  background: rgba(0, 113, 227, 0.13);
+}
+
+body.theme-apple .toolbar-primary {
+  border-color: transparent;
+  background: var(--retro-accent);
+  color: #ffffff;
+}
+
+body.theme-apple .toolbar-primary:hover {
+  border-color: transparent;
+  background: var(--win-blue-light);
+  color: #ffffff;
+}
+
+body.theme-apple .col-resizer:hover,
+body.theme-apple .col-resizer.dragging {
+  box-shadow: 0 0 0 1px rgba(0, 113, 227, 0.45);
+}
+
+/* Panels: white cards on the light-gray canvas. */
+body.theme-apple .left-panel.win-outset,
+body.theme-apple .panel-group.win-outset {
+  border: 1px solid var(--retro-line);
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+body.theme-apple .folder-input,
+body.theme-apple .retro-dropdown,
+body.theme-apple .sound-specs-line select {
+  border: 1px solid var(--retro-line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--retro-text);
+}
+
+body.theme-apple .folder-input:focus,
+body.theme-apple .retro-dropdown:focus {
+  border-color: var(--retro-accent);
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.16);
+}
+
+body.theme-apple .folder-input::placeholder {
+  color: #a1a1a6;
+}
+
+/* Library rows. */
+body.theme-apple .game-list-box.win-inset {
+  background: #ffffff;
+}
+
+body.theme-apple .game-list-item {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+}
+
+body.theme-apple .game-list-item:hover {
+  border-color: var(--retro-line);
+  background: rgba(0, 0, 0, 0.035);
+}
+
+body.theme-apple .game-list-item.selected {
+  border-color: rgba(0, 113, 227, 0.45);
+  background: rgba(0, 113, 227, 0.10);
+}
+
+body.theme-apple .game-thumb-box {
+  border-radius: 8px;
+  background: #f5f5f7;
+}
+
+body.theme-apple .game-list-play {
+  border: 1px solid transparent;
+  background: var(--retro-accent);
+  color: #ffffff;
+}
+
+body.theme-apple .game-list-play:hover {
+  background: var(--win-blue-light);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+/* Showcase: plain white, no CRT grid or glow. */
+body.theme-apple .center-showcase-panel.win-inset {
+  border: 1px solid var(--retro-line);
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+body.theme-apple .center-cover-frame {
+  border: 1px solid var(--retro-line);
+  border-radius: 12px;
+  background: #f5f5f7;
+  box-shadow: none;
+}
+
+body.theme-apple .center-cover-placeholder {
+  color: #c7c7cc;
+  filter: none;
+}
+
+body.theme-apple .center-info-block {
+  background: transparent;
+}
+
+body.theme-apple .center-game-title {
+  color: var(--retro-text);
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  text-shadow: none;
+}
+
+body.theme-apple #btnOpenGameSaves {
+  background: #ffffff !important;
+  color: var(--retro-text) !important;
+}
+
+body.theme-apple .drive-row.win-inset,
+body.theme-apple .sound-specs-line.win-inset {
+  border: 1px solid var(--retro-line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+body.theme-apple .settings-row[style] {
+  background: rgba(0, 0, 0, 0.025) !important;
+}
+
+body.theme-apple .btn-catalog-dos {
+  border-color: rgba(0, 113, 227, 0.45);
+  background: rgba(0, 113, 227, 0.08);
+  color: var(--retro-accent);
+}
+
+body.theme-apple .btn-catalog-dos:hover {
+  background: rgba(0, 113, 227, 0.14);
+  box-shadow: none;
+}
+
+/* The primary action stays the one saturated element on the page. */
+body.theme-apple .btn-run-dos {
+  border: 0;
+  border-radius: 10px;
+  background: var(--retro-accent);
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10);
+}
+
+body.theme-apple .btn-run-dos:hover {
+  background: var(--win-blue-light);
+  box-shadow: 0 2px 8px rgba(0, 113, 227, 0.28);
+}
+
+body.theme-apple .bottom-status-bar {
+  background: rgba(255, 255, 255, 0.85);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-top: 1px solid var(--retro-line);
+  color: var(--retro-muted);
+}
+
+/* Modals. */
+body.theme-apple .modal-overlay {
+  background: rgba(0, 0, 0, 0.28);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+body.theme-apple .modal-box.win-outset {
+  border: 1px solid var(--retro-line);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.20);
+}
+
+body.theme-apple .preset-chip-item:hover,
+body.theme-apple .checkpoint-item:hover {
+  background: rgba(0, 113, 227, 0.08);
+}
+
+body.theme-apple .preview-code-dark {
+  border: 1px solid var(--retro-line);
+  border-radius: 8px;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-family: "SF Mono", Menlo, monospace;
+}
+
+/* Catalog. */
+body.theme-apple .catalog-grid-box.win-inset {
+  background: #ffffff;
+}
+
+body.theme-apple .genre-tab.active {
+  border: 1px solid transparent;
+  background: var(--retro-accent);
+  color: #ffffff;
+}
+
+body.theme-apple .catalog-card {
+  border: 1px solid var(--retro-line);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+body.theme-apple .catalog-card:hover {
+  border-color: rgba(0, 113, 227, 0.45);
+  background: #ffffff;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.10);
+}
+
+body.theme-apple .catalog-card-header {
+  background: #f5f5f7;
+}
+
+body.theme-apple .catalog-card-genre,
+body.theme-apple .catalog-card-year {
+  border: 1px solid var(--retro-line);
+  color: var(--retro-muted);
+}
+
+body.theme-apple .btn-download-action {
+  border: 1px solid transparent;
+  background: var(--retro-accent);
+  color: #ffffff;
+}
+
+body.theme-apple .btn-download-action:hover {
+  background: var(--win-blue-light);
+  color: #ffffff;
+}
+
+body.theme-apple ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+body.theme-apple ::-webkit-scrollbar-thumb {
+  border: 2px solid #ffffff;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+/* Wizard, diagnostics and media rows carry their own dark literals. */
+body.theme-apple .feature-heading {
+  color: var(--retro-text);
+}
+
+body.theme-apple .wizard-progress span {
+  border: 1px solid var(--retro-line);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--retro-muted);
+}
+
+body.theme-apple .wizard-progress span.active {
+  border-color: transparent;
+  background: var(--retro-accent);
+  color: #ffffff;
+}
+
+body.theme-apple .diagnostic-item,
+body.theme-apple .media-section,
+body.theme-apple .mapper-preview {
+  border: 1px solid var(--retro-line);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--retro-text);
+}
+
+body.theme-apple .media-item-row {
+  border: 1px solid var(--retro-line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+body.theme-apple .media-item-row span:nth-child(2) {
+  color: var(--retro-text);
+}
+
+body.theme-apple .diagnostic-item.ok .diagnostic-mark {
+  color: #1d9e50;
+}
+
+body.theme-apple .diagnostic-item.warning .diagnostic-mark {
+  color: #b25000;
+}
+
+body.theme-apple .diagnostic-item.error .diagnostic-mark {
+  color: #d70015;
+}
+
+body.theme-apple .diagnostic-item small {
+  color: var(--retro-muted);
+}
+
+body.theme-apple .feature-status {
+  color: var(--retro-muted);
+}
+
+body.theme-apple .primary-action {
+  border-color: transparent !important;
+  background: var(--retro-accent) !important;
+  color: #ffffff !important;
+}
+
+/* Brand lockup, function-key strip and status chrome keep DOS-era literals
+   that are illegible on white. */
+body.theme-apple .brand-copy strong {
+  color: var(--retro-text);
+  font-weight: 600;
+}
+
+body.theme-apple .brand-copy small {
+  color: var(--retro-muted);
+}
+
+body.theme-apple .center-game-status {
+  color: var(--retro-muted);
+}
+
+body.theme-apple .function-key-strip {
+  border-top: 1px solid var(--retro-line);
+  background: rgba(255, 255, 255, 0.85);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+
+body.theme-apple .function-key {
+  border: 1px solid var(--retro-line);
+  border-radius: 7px;
+  background: #ffffff;
+  color: var(--retro-text);
+}
+
+body.theme-apple .function-key kbd {
+  border-right: 1px solid var(--retro-line);
+  background: #f5f5f7;
+  color: var(--retro-muted);
+  font-weight: 600;
+}
+
+body.theme-apple .function-key:hover,
+body.theme-apple .function-key:focus-visible {
+  border-color: rgba(0, 113, 227, 0.55);
+  background: rgba(0, 113, 227, 0.08);
+  color: var(--retro-accent);
+}
+
+body.theme-apple .status-copyright {
+  color: #a1a1a6;
+}
+
+body.theme-apple .catalog-rights.verified {
+  color: #0b6b32;
+  background: #e3f7ea;
+}
+
+body.theme-apple .catalog-rights.unknown {
+  color: #7a5500;
+  background: #fdf3d4;
+}
+
+body.theme-apple .preset-suggestion {
+  border-bottom: 1px solid var(--retro-line);
+  background: #ffffff;
+  color: var(--retro-text);
+}
+
+body.theme-apple .preset-suggestion:hover {
+  background: rgba(0, 113, 227, 0.08);
+  color: var(--retro-accent);
+}
+
+body.theme-apple .preset-empty {
+  color: var(--retro-muted);
+}
+
+body.theme-apple .btn-secondary-launch {
+  border: 1px solid var(--retro-line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--retro-text);
+}
+
+body.theme-apple .btn-secondary-launch:hover {
+  border-color: rgba(0, 113, 227, 0.55);
+  background: rgba(0, 113, 227, 0.07);
+}
+
+body.theme-apple .post-install-candidate {
+  border: 1px solid var(--retro-line);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+body.theme-apple .post-install-candidate:hover,
+body.theme-apple .post-install-candidate.selected {
+  border-color: transparent;
+  background: var(--retro-accent);
+  color: #ffffff;
+}
+
+/* Confirm actions carry their colour inline, so the theme must outrank it. */
+body.theme-apple #btnSaveProfile,
+body.theme-apple #btnSaveConfig,
+body.theme-apple #btnCreateCheckpoint,
+body.theme-apple #btnApplyPostInstallExe,
+body.theme-apple #btnAutoDetectEmus {
+  border-color: transparent !important;
+  background: var(--retro-accent) !important;
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+body.theme-apple #btnSaveProfile:hover,
+body.theme-apple #btnSaveConfig:hover,
+body.theme-apple #btnCreateCheckpoint:hover,
+body.theme-apple #btnApplyPostInstallExe:hover,
+body.theme-apple #btnAutoDetectEmus:hover {
+  background: var(--win-blue-light) !important;
+}

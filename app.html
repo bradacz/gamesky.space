@@ -94,9 +94,13 @@
               <div id="centerGenre" style="font-size:13px; opacity:0.85; margin-top:1px;">Only real local installations are shown</div>
               <div class="game-detail-actions">
                 <button class="btn-3d" id="btnToggleFavorite">☆ FAVORITE</button>
-                <button class="btn-3d" id="btnDiagnoseGame">✓ CHECK GAME</button>
+                <button class="btn-3d" id="btnDiagnoseGame">✓ CHECK</button>
                 <button class="btn-3d" id="btnGameControls">⌨ CONTROLS</button>
                 <button class="btn-3d" id="btnOpenGameSaves">💾 SAVES</button>
+                <button class="btn-3d" id="btnSetArtwork" title="Choose a cover image from disk">🖼 ARTWORK</button>
+                <button class="btn-3d" id="btnLaunchFileManager" title="Open DOSBox in Norton Commander (Drive Y:)">📁 NC (Y:)</button>
+                <button class="btn-3d" id="btnLaunchSetup" title="Run Setup / Configurator" style="display:none;">⚙️ SETUP</button>
+                <button class="btn-3d" id="btnUnpackGameArchive" title="Unpack Archive / Package" style="display:none; background:#7b4a00; color:#fff;">📦 UNPACK</button>
               </div>
             </div>
           </div>
@@ -219,10 +223,10 @@
             </div>
 
             <!-- BIG RED RUN BUTTON -->
-            <div class="run-btn-container">
+            <div class="run-btn-container" style="margin-top:8px;">
               <button class="btn-run-dos" id="btnRunDosGame">
-                <span class="pixel-play-icon"></span>
-                <span>RUN GAME</span>
+                <span class="pixel-play-icon" id="runDosIcon"></span>
+                <span id="lblRunDosGame">RUN GAME</span>
               </button>
             </div>
 
@@ -389,13 +393,29 @@
             </div>
           </div>
 
+          <div class="field-block">
+            <span class="field-label">Norton Commander / File Manager Path (optional):</span>
+            <div style="display:flex; gap:4px">
+              <input type="text" id="cfgNortonCommanderPath" class="folder-input" placeholder="Default: Built-in DOS Tools (VC/NC)">
+              <button class="btn-3d" id="btnBrowseNortonCommander">Browse...</button>
+            </div>
+            <span style="font-size:11px; color:#555;">Point to your own NC.EXE, VC.COM, or custom DOS utility folder.</span>
+          </div>
+
           <div class="field-block" style="margin-top:2px">
             <span class="field-label">Visual Theme:</span>
             <select id="cfgThemeSelect" class="retro-dropdown">
               <option value="classic-win95">Windows 95 Classic (Teal &amp; Gray)</option>
               <option value="norton-blue">Norton Commander (Navy Blue &amp; Cyan)</option>
               <option value="dos-matrix">DOS Green Matrix (Phosphor Dark)</option>
+              <option value="apple-light">Apple Light (Clean White)</option>
             </select>
+          </div>
+
+          <div class="field-block" style="margin-top:2px">
+            <label style="font-size:14px; cursor:pointer;">
+              <input type="checkbox" id="cfgDeleteArchiveAfterUnpack"> Delete original archive (.zip / .exe) after unpacking
+            </label>
           </div>
 
           <div class="field-block" style="margin-top:2px">
@@ -681,6 +701,25 @@
       </div>
     </div>
 
-  
+    <!-- MODAL: POST-INSTALL ASSISTANT -->
+    <div class="modal-overlay" id="modalPostInstall">
+      <div class="modal-box win-outset" style="max-width:480px;">
+        <div class="title-bar">
+          <div class="title-text">
+            <span>🎉 Installation / Setup Complete</span>
+          </div>
+          <button class="title-btn" id="btnCancelPostInstallX">✕</button>
+        </div>
+        <div class="modal-content" style="font-size:13px;">
+          <p id="postInstallDesc" style="margin-bottom:8px;">DOSBox session ended. We detected the following executables in this game folder:</p>
+          <div id="postInstallCandidatesList" class="win-inset" style="background:#fff; max-height:160px; overflow-y:auto; padding:6px; margin-bottom:8px;"></div>
+          <p style="font-size:12px; color:#555;">Choose the executable to set as the default launcher for this game.</p>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-3d" id="btnApplyPostInstallExe" style="background:#008080; color:#fff">Apply As Main Executable</button>
+          <button class="btn-3d" id="btnSkipPostInstall">Keep Current</button>
+        </div>
+      </div>
+    </div>
 
 </body></html>

@@ -8,11 +8,13 @@ export interface AppPreferences {
   defaultCDrive: string;
   crtFilterEnabled: boolean;
   soundEffectsEnabled: boolean;
-  theme: 'classic-win95' | 'norton-blue' | 'dos-matrix' | 'dos-amber';
+  theme: 'classic-win95' | 'norton-blue' | 'dos-matrix' | 'dos-amber' | 'apple-light';
   setupCompleted: boolean;
   language: 'en' | 'cs';
   automaticArtwork: boolean;
   checkForUpdates: boolean;
+  customNortonCommanderPath?: string;
+  deleteArchiveAfterUnpack?: boolean;
 }
 
 export interface NativeDatabaseStatus {
@@ -130,7 +132,9 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   setupCompleted: false,
   language: 'en',
   automaticArtwork: true,
-  checkForUpdates: true
+  checkForUpdates: true,
+  customNortonCommanderPath: '',
+  deleteArchiveAfterUnpack: false
 };
 
 export class StorageService {

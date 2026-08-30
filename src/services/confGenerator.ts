@@ -1,16 +1,36 @@
 import { GameProfile } from '../types';
 
-export function generateDosboxConf(game: GameProfile): string {
-  const { settings, drives, executable, parameters, workingDir } = game;
+export interface GenerateConfOptions {
+  mode?: 'game' | 'installer' | 'file-manager';
+  overrideExecutable?: string;
+  overrideWorkingDir?: string;
+  overrideParameters?: string;
+  toolsMountPath?: string;
+  customNortonCommanderPath?: string;
+}
+
+export function generateDosboxConf(game: GameProfile, options?: GenerateConfOptions): string {
+  const { settings, drives } = game;
+  const mode = options?.mode || 'game';
+  const executable = options?.overrideExecutable !== undefined ? options.overrideExecutable : game.executable;
+  const workingDir = options?.overrideWorkingDir !== undefined ? options.overrideWorkingDir : game.workingDir;
+  const parameters = options?.overrideParameters !== undefined ? options.overrideParameters : game.parameters;
+
   const mediaSets = drives.mediaSets || [];
   const hasManagedFloppy = mediaSets.some(set => set.items.some(item => item.kind === 'floppy'));
   const hasManagedCd = mediaSets.some(set => set.items.some(item => item.kind === 'cdrom' || item.kind === 'directory'));
+
+  const modeBadge = mode === 'file-manager'
+    ? ' [DOS File Manager Mode]'
+    : mode === 'installer'
+      ? ' [Setup / Installer Mode]'
+      : '';
 
   // Autoexec commands generation
   const autoexecLines: string[] = [
     `@echo off`,
     `echo ====================================================`,
-    `echo   GameSky.space - Launcher Engine`,
+    `echo   GameSky.space - Launcher Engine${modeBadge}`,
     `echo   Title: ${sanitizeDosLine(game.title)}`,
     `echo ====================================================`,
     `echo.`
@@ -22,6 +42,33 @@ export function generateDosboxConf(game: GameProfile): string {
     autoexecLines.push(
       `SET BLASTER=A${settings.sbPort} I${settings.sbIrq} D${settings.sbDma} H${settings.sbHdma} T${tVal}`
     );
+  }
+
+  // Mount Tools Drive Y: in file-manager mode
+  let toolsFolder = options?.toolsMountPath && options.toolsMountPath.trim() !== '' ? options.toolsMountPath.trim() : '';
+  let customExeName = '';
+
+  if (mode === 'file-manager') {
+    const customNC = options?.customNortonCommanderPath?.trim();
+    if (customNC) {
+      if (/\.(exe|com|bat)$/i.test(customNC)) {
+        const lastSlash = Math.max(customNC.lastIndexOf('/'), customNC.lastIndexOf('\\'));
+        if (lastSlash > 0) {
+          toolsFolder = customNC.substring(0, lastSlash);
+          customExeName = customNC.substring(lastSlash + 1);
+        } else {
+          customExeName = customNC;
+        }
+      } else {
+        toolsFolder = customNC;
+        customExeName = 'nc.exe';
+      }
+    }
+
+    if (toolsFolder) {
+      autoexecLines.push(`mount y "${escapePath(toolsFolder)}"`);
+      autoexecLines.push(`SET PATH=Y:\\;%PATH%`);
+    }
   }
 
   // Mount Floppy Drive A:
@@ -46,11 +93,33 @@ export function generateDosboxConf(game: GameProfile): string {
   if (!hasManagedCd && drives.cdRomPath && drives.cdRomPath.trim() !== '') {
     const cd = drives.cdRomPath.trim();
     const lowerCd = cd.toLowerCase();
-    const isImage = lowerCd.endsWith('.iso') || lowerCd.endsWith('.cue') || lowerCd.endsWith('.bin') || lowerCd.endsWith('.img') || lowerCd.endsWith('.nrg') || lowerCd.endsWith('.mds') || lowerCd.endsWith('.mdf');
+    const isImage =
+      lowerCd.endsWith('.iso') ||
+      lowerCd.endsWith('.cue') ||
+      lowerCd.endsWith('.bin') ||
+      lowerCd.endsWith('.img') ||
+      lowerCd.endsWith('.nrg') ||
+      lowerCd.endsWith('.mds') ||
+      lowerCd.endsWith('.mdf') ||
+      lowerCd.endsWith('.ins');
+    // Raw-sector images (CUE sheets, GOG's .ins) need an explicit filesystem;
+    // without it DOSBox reads the sector layout as the volume and games that
+    // probe the disc report it as missing.
+    const needsIsoFs =
+      lowerCd.endsWith('.cue') || lowerCd.endsWith('.ins') || lowerCd.endsWith('.bin');
+    const fallbackLabel =
+      game.title.replace(/[^a-zA-Z0-9]/g, ' ').trim().split(/\s+/)[0]?.toUpperCase() || 'ALBION';
+    const labelArg = drives.cdRomLabel && drives.cdRomLabel.trim() !== ''
+      ? ` -label "${drives.cdRomLabel.trim()}"`
+      : ` -label "${fallbackLabel}"`;
+
     if (isImage) {
-      autoexecLines.push(`imgmount d "${escapePath(cd)}" -t iso`);
+      // imgmount takes the label from the image itself; passing -label makes
+      // DOSBox read it as a second disc path.
+      const fsArg = needsIsoFs ? ' -fs iso' : '';
+      autoexecLines.push(`imgmount d "${escapePath(cd)}" -t iso${fsArg}`);
     } else {
-      autoexecLines.push(`mount d "${escapePath(cd)}" -t cdrom`);
+      autoexecLines.push(`mount d "${escapePath(cd)}" -t cdrom${labelArg}`);
     }
   }
 
@@ -97,7 +166,8 @@ export function generateDosboxConf(game: GameProfile): string {
 
   // Navigate to game subfolder if specified
   if (workingDir && workingDir.trim() !== '') {
-    autoexecLines.push(`cd "${sanitizeDosArgument(workingDir.trim())}"`);
+    const cleanWdir = sanitizeDosArgument(workingDir.trim()).replace(/\//g, '\\');
+    autoexecLines.push(`cd ${cleanWdir}`);
   }
 
   // User custom autoexec lines
@@ -105,14 +175,16 @@ export function generateDosboxConf(game: GameProfile): string {
     autoexecLines.push(...settings.customAutoexecLines);
   }
 
-  // Launch executable
-  if (executable && executable.trim() !== '') {
+  // Launch execution depending on mode
+  if (mode === 'file-manager') {
+    if (customExeName) {
+      autoexecLines.push(`if exist y:\\${customExeName} y:\\${customExeName}`);
+    }
+    autoexecLines.push(`call y:\\nc.bat`);
+  } else if (executable && executable.trim() !== '') {
     const params = parameters ? ` ${sanitizeDosLine(parameters.trim())}` : '';
-    const safeExecutable = sanitizeDosArgument(executable.trim());
-    const executableCommand = /^[A-Za-z0-9_~.$!#@%&'()+,;=\-\\]+$/.test(safeExecutable)
-      ? safeExecutable
-      : `"${safeExecutable}"`;
-    autoexecLines.push(`${executableCommand}${params}`);
+    const safeExecutable = sanitizeDosArgument(executable.trim()).replace(/\//g, '\\');
+    autoexecLines.push(`${safeExecutable}${params}`);
   }
 
   // Cycles setting formatting

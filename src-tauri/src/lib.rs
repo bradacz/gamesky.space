@@ -61,6 +61,8 @@ pub struct DiscoveredGame {
     #[serde(rename = "workingDir")]
     pub working_dir: String,
     pub executable: String,
+    #[serde(rename = "cdRomPath", default)]
+    pub cd_rom_path: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -106,7 +108,7 @@ pub struct MediaPathRequest {
     pub kind: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExecutableCandidate {
     pub executable: String,
     #[serde(rename = "workingDir")]
@@ -126,6 +128,31 @@ pub struct DiagnosticItem {
     pub message: String,
     #[serde(rename = "repairAction")]
     pub repair_action: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveredArchiveItem {
+    pub file_name: String,
+    pub file_path: String,
+    pub relative_path: String,
+    pub format: String,
+    pub size_bytes: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct UnpackArchiveResult {
+    pub success: bool,
+    pub message: String,
+    pub extracted_files_count: usize,
+    pub discovered_executable: Option<String>,
+    pub discovered_working_dir: Option<String>,
+    #[serde(default)]
+    pub discovered_cd_rom_path: Option<String>,
+    #[serde(default)]
+    pub discovered_title: Option<String>,
+    pub installer_candidates: Vec<ExecutableCandidate>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -817,6 +844,90 @@ fn cache_artwork_blocking(
     Ok(path.to_string_lossy().to_string())
 }
 
+/// Identifies an image by magic bytes rather than by extension, so a mislabeled
+/// or non-image file can't be written into the artwork cache.
+fn image_extension_from_bytes(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]) {
+        return Some("png");
+    }
+    if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+        return Some("jpg");
+    }
+    if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        return Some("webp");
+    }
+    if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        return Some("gif");
+    }
+    None
+}
+
+/// Copies a user-picked image into `directory` and returns its path. The
+/// filename carries a timestamp so replacing a cover yields a new URL and the
+/// previously rendered image can't be served from cache.
+fn import_artwork_into(
+    directory: &Path,
+    game_id: &str,
+    source_path: &str,
+    now_millis: u128,
+) -> Result<String, String> {
+    if !is_valid_identifier(game_id) {
+        return Err("Invalid game identifier".to_string());
+    }
+    let source = expand_home_path(source_path.trim());
+    let metadata = fs::metadata(&source)
+        .map_err(|_| format!("Image '{}' was not found.", source.display()))?;
+    if !metadata.is_file() {
+        return Err("The selected artwork path is not a file.".to_string());
+    }
+    const MAX_ARTWORK_SIZE: u64 = 8 * 1024 * 1024;
+    if metadata.len() > MAX_ARTWORK_SIZE {
+        return Err("Artwork exceeds the 8 MiB safety limit".to_string());
+    }
+
+    let bytes = fs::read(&source).map_err(|error| format!("Failed to read artwork: {error}"))?;
+    let extension = image_extension_from_bytes(&bytes)
+        .ok_or_else(|| "Unsupported image format. Use PNG, JPEG, WebP or GIF.".to_string())?;
+
+    fs::create_dir_all(directory)
+        .map_err(|error| format!("Failed to create artwork cache: {error}"))?;
+
+    let prefix = format!("{game_id}-custom-");
+    if let Ok(entries) = fs::read_dir(directory) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with(&prefix) || name.starts_with(&format!(".{prefix}")) {
+                let _ = fs::remove_file(entry.path());
+            }
+        }
+    }
+
+    let path = directory.join(format!("{prefix}{now_millis}.{extension}"));
+    let temporary = directory.join(format!(".{prefix}{now_millis}.{extension}.tmp"));
+    fs::write(&temporary, &bytes).map_err(|error| format!("Failed to save artwork: {error}"))?;
+    fs::rename(&temporary, &path)
+        .map_err(|error| format!("Failed to publish artwork: {error}"))?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn import_artwork_file(
+    app: tauri::AppHandle,
+    game_id: String,
+    source_path: String,
+) -> Result<String, String> {
+    let directory = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Failed to resolve artwork cache: {error}"))?
+        .join("artwork");
+    let now = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    import_artwork_into(&directory, &game_id, &source_path, now)
+}
+
 #[tauri::command]
 async fn cache_artwork(
     app: tauri::AppHandle,
@@ -839,12 +950,34 @@ fn discover_executable(game_dir: &Path, preferred_path: Option<&str>) -> Option<
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_dir() {
+                    let name = entry.file_name().to_string_lossy().to_lowercase();
+                    if matches!(
+                        name.as_str(),
+                        "docs" | "documentation" | "capture" | "drivers" | "saves" | "__macosx"
+                    ) {
+                        continue;
+                    }
                     visit_dir(&path, candidates, depth + 1);
                 } else if path.is_file() {
                     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                         let ext_lower = ext.to_lowercase();
                         if ext_lower == "exe" || ext_lower == "bat" || ext_lower == "com" {
-                            candidates.push(path);
+                            let fname = path
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("")
+                                .to_ascii_lowercase();
+                            if !matches!(
+                                fname.as_str(),
+                                "dos4gw.exe"
+                                    | "dos32a.exe"
+                                    | "cwspdm.exe"
+                                    | "unins000.exe"
+                                    | "setsound.exe"
+                                    | "uninstall.exe"
+                            ) {
+                                candidates.push(path);
+                            }
                         }
                     }
                 }
@@ -874,7 +1007,42 @@ fn discover_executable(game_dir: &Path, preferred_path: Option<&str>) -> Option<
         }
     }
 
-    let priority_names = [
+    // 1. Check if executable matches folder name (e.g. ALBION/ALBION.EXE)
+    let parent_matching = exe_candidates.iter().find(|path| {
+        let stem = path.file_stem().and_then(|name| name.to_str());
+        let parent = path
+            .parent()
+            .and_then(Path::file_name)
+            .and_then(|name| name.to_str());
+        matches!((stem, parent), (Some(stem), Some(parent)) if stem.eq_ignore_ascii_case(parent))
+    });
+    if let Some(matching) = parent_matching {
+        return Some(executable_parts(game_dir, matching));
+    }
+
+    // 2. Check if executable matches game directory root stem (e.g. Albion_CD_Czech -> albion.exe)
+    let game_dir_stem = game_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+    let game_dir_words: Vec<String> = game_dir_stem
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.len() >= 3)
+        .map(|w| w.to_ascii_lowercase())
+        .collect();
+    if let Some(game_name_match) = exe_candidates.iter().find(|path| {
+        let stem = path
+            .file_stem()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        game_dir_words.iter().any(|w| stem == *w || stem.starts_with(w))
+    }) {
+        return Some(executable_parts(game_dir, game_name_match));
+    }
+
+    // 3. Specific top game binary names
+    let specific_priority_names = [
         "wolf3d.exe",
         "doom.exe",
         "doom2.exe",
@@ -886,57 +1054,44 @@ fn discover_executable(game_dir: &Path, preferred_path: Option<&str>) -> Option<
         "sc2000.exe",
         "jazz.exe",
         "tyrian.exe",
-        "dr.exe",
         "dune2.exe",
         "civ.exe",
         "war.exe",
-        "play.bat",
-        "start.exe",
-        "main.exe",
-        "run.bat",
-        "go.bat",
-        "game.exe",
+        "albion.exe",
     ];
-
-    let mut chosen = exe_candidates
-        .iter()
-        .find(|path| {
-            let stem = path.file_stem().and_then(|name| name.to_str());
-            let parent = path
-                .parent()
-                .and_then(Path::file_name)
-                .and_then(|name| name.to_str());
-            matches!((stem, parent), (Some(stem), Some(parent)) if stem.eq_ignore_ascii_case(parent))
-        })
-        .or_else(|| {
-            exe_candidates.iter().find(|path| {
-                let relative = path.strip_prefix(game_dir).unwrap_or(path);
-                let is_game_path = relative.components().next().is_some_and(|component| {
-                    component.as_os_str().to_string_lossy().eq_ignore_ascii_case("games")
-                });
-                let is_binary = path
-                    .extension()
-                    .and_then(|extension| extension.to_str())
-                    .is_some_and(|extension| {
-                        extension.eq_ignore_ascii_case("exe") || extension.eq_ignore_ascii_case("com")
-                    });
-                is_game_path && is_binary
-            })
-        })
-        .unwrap_or(&exe_candidates[0]);
-    for p in priority_names {
+    for p in specific_priority_names {
         if let Some(matching) = exe_candidates.iter().find(|path| {
             path.file_name()
                 .and_then(|name| name.to_str())
                 .map(|name| name.eq_ignore_ascii_case(p))
                 .unwrap_or(false)
         }) {
-            chosen = matching;
-            break;
+            return Some(executable_parts(game_dir, matching));
         }
     }
 
-    Some(executable_parts(game_dir, chosen))
+    // 4. Fallback generic launcher names (play.bat, start.exe, run.bat, etc.)
+    let fallback_names = [
+        "play.bat",
+        "start.exe",
+        "run.bat",
+        "go.bat",
+        "game.exe",
+        "main.exe",
+    ];
+    for p in fallback_names {
+        if let Some(matching) = exe_candidates.iter().find(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .map(|name| name.eq_ignore_ascii_case(p))
+                .unwrap_or(false)
+        }) {
+            return Some(executable_parts(game_dir, matching));
+        }
+    }
+
+    // 5. Default to the first found candidate
+    Some(executable_parts(game_dir, &exe_candidates[0]))
 }
 
 fn executable_parts(game_dir: &Path, executable: &Path) -> (String, String) {
@@ -1126,6 +1281,520 @@ fn extract_zip_safely(zip_path: &Path, destination: &Path) -> Result<(), String>
             .map_err(|e| format!("Failed to finish extracted file: {e}"))?;
     }
     Ok(())
+}
+
+fn detect_archive_format(path: &Path) -> Option<String> {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_default();
+
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_default();
+
+    if let Ok(mut file) = File::open(path) {
+        let mut header = [0_u8; 8];
+        let bytes_read = file.read(&mut header).unwrap_or(0);
+        if bytes_read >= 4 {
+            if matches!(
+                &header[..4],
+                [0x50, 0x4b, 0x03, 0x04] | [0x50, 0x4b, 0x05, 0x06] | [0x50, 0x4b, 0x07, 0x08]
+            ) {
+                return Some("zip".to_string());
+            }
+            if bytes_read >= 6 && &header[..6] == b"7z\xbc\xaf\x27\x1c" {
+                return Some("7z".to_string());
+            }
+            if bytes_read >= 7
+                && (&header[..7] == b"Rar!\x1a\x07\x00" || &header[..7] == b"Rar!\x1a\x07\x01")
+            {
+                return Some("rar".to_string());
+            }
+            if &header[..2] == b"\x60\xea" {
+                return Some("arj".to_string());
+            }
+            if bytes_read >= 5 && &header[..2] == b"-l" && &header[4..5] == b"-" {
+                return Some("lha".to_string());
+            }
+            if &header[..2] == b"MZ" {
+                let _ = file.seek(SeekFrom::Start(0));
+                if ZipArchive::new(&mut file).is_ok() {
+                    return Some("sfx_exe".to_string());
+                }
+                // Scan buffer for 7z or RAR SFX headers
+                let _ = file.seek(SeekFrom::Start(0));
+                let mut buffer = vec![0_u8; 1024 * 512];
+                if let Ok(read_len) = file.read(&mut buffer) {
+                    if buffer[..read_len]
+                        .windows(21)
+                        .any(|w| w == b"Inno Setup Setup Data")
+                    {
+                        return Some("inno".to_string());
+                    }
+                    if buffer[..read_len].windows(6).any(|w| w == b"7z\xbc\xaf\x27\x1c") {
+                        return Some("sfx_7z".to_string());
+                    }
+                    if buffer[..read_len].windows(4).any(|w| w == b"Rar!") {
+                        return Some("sfx_rar".to_string());
+                    }
+                }
+                if name.contains("package") || name.contains("sfx") {
+                    return Some("sfx_exe".to_string());
+                }
+            }
+        }
+    }
+
+    match ext.as_str() {
+        "zip" => Some("zip".to_string()),
+        "7z" => Some("7z".to_string()),
+        "rar" => Some("rar".to_string()),
+        "arj" => Some("arj".to_string()),
+        "lha" | "lzh" => Some("lha".to_string()),
+        _ => {
+            if name.contains("package.exe") || name.contains(".sfx.exe") {
+                Some("sfx_exe".to_string())
+            } else {
+                None
+            }
+        }
+    }
+}
+
+pub struct GogLayout {
+    pub title: Option<String>,
+    pub executable: Option<String>,
+    pub cd_rom_path: Option<String>,
+}
+
+/// GOG DOS releases unpack to a flat game root alongside `goggame-<id>.info`
+/// (launch metadata), a raw CUE/BIN disc image (`game.ins` + `game.gog`), and
+/// Windows-installer scaffolding that DOSBox has no use for.
+fn detect_gog_layout(root: &Path) -> Option<GogLayout> {
+    let entries = fs::read_dir(root).ok()?;
+    let mut info_file = None;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with("goggame-") && name.ends_with(".info") {
+            info_file = Some(entry.path());
+            break;
+        }
+    }
+    let info_file = info_file?;
+
+    let mut layout = GogLayout {
+        title: None,
+        executable: None,
+        cd_rom_path: None,
+    };
+
+    if let Ok(content) = fs::read_to_string(&info_file) {
+        if let Ok(info) = serde_json::from_str::<serde_json::Value>(&content) {
+            layout.title = info
+                .get("name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+        }
+    }
+
+    // GOG's own launcher runs DOSBox, so its playTasks point at dosbox.exe rather
+    // than the DOS binary. Take the executable from the bundled DOSBox autoexec.
+    if let Some(conf_exe) = find_gog_autoexec_executable(root) {
+        layout.executable = Some(conf_exe);
+    }
+
+    let ins = root.join("game.ins");
+    if ins.is_file() {
+        layout.cd_rom_path = Some(ins.to_string_lossy().to_string());
+    }
+
+    Some(layout)
+}
+
+/// Reads the DOS executable out of the `[autoexec]` block in GOG's bundled
+/// `dosbox_*.conf` files, skipping the mount/menu plumbing around it.
+fn find_gog_autoexec_executable(root: &Path) -> Option<String> {
+    let support = root.join("__support").join("app");
+    let entries = fs::read_dir(&support).ok()?;
+    let mut confs: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.eq_ignore_ascii_case("conf"))
+                .unwrap_or(false)
+        })
+        .collect();
+    // `*_single.conf` carries the launcher menu; prefer it over the base config.
+    confs.sort_by_key(|p| {
+        !p.file_name()
+            .and_then(|n| n.to_str())
+            .map(|n| n.to_ascii_lowercase().contains("single"))
+            .unwrap_or(false)
+    });
+
+    for conf in confs {
+        let Ok(content) = fs::read_to_string(&conf) else {
+            continue;
+        };
+        let mut in_autoexec = false;
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with('[') {
+                in_autoexec = trimmed.eq_ignore_ascii_case("[autoexec]");
+                continue;
+            }
+            if !in_autoexec || trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            let lower = trimmed.to_ascii_lowercase();
+            if lower.ends_with(".exe") || lower.ends_with(".bat") || lower.ends_with(".com") {
+                let candidate = trimmed.split_whitespace().next().unwrap_or(trimmed);
+                let candidate_lower = candidate.to_ascii_lowercase();
+                let is_plumbing = candidate_lower.contains("dosbox")
+                    || candidate_lower.starts_with("setup")
+                    || candidate_lower.contains('\\')
+                    || candidate_lower.contains('/');
+                if !is_plumbing && root.join(candidate).is_file() {
+                    return Some(candidate.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Strips Windows-installer scaffolding that innoextract emits but DOSBox never
+/// reads, so executable detection isn't misled by it.
+fn prune_gog_installer_scaffolding(root: &Path) {
+    for name in ["tmp", "__redist", "commonappdata", "app"] {
+        let path = root.join(name);
+        if path.is_dir() {
+            let _ = fs::remove_dir_all(&path);
+        }
+    }
+}
+
+fn flatten_single_root_folder(destination: &Path) -> Result<(), String> {
+    let entries = fs::read_dir(destination)
+        .map_err(|e| format!("Failed to read destination directory: {e}"))?
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| {
+            let name = entry.file_name().to_string_lossy().to_string();
+            !name.starts_with('.') && name != "__MACOSX"
+        })
+        .collect::<Vec<_>>();
+
+    if entries.len() == 1 && entries[0].path().is_dir() {
+        let single_subdir = entries[0].path();
+        let sub_entries = fs::read_dir(&single_subdir)
+            .map_err(|e| format!("Failed to read nested directory: {e}"))?
+            .filter_map(|entry| entry.ok())
+            .collect::<Vec<_>>();
+
+        for sub_entry in sub_entries {
+            let src = sub_entry.path();
+            let dest = destination.join(sub_entry.file_name());
+            if !dest.exists() {
+                let _ = fs::rename(&src, &dest);
+            }
+        }
+        let _ = fs::remove_dir_all(&single_subdir);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn scan_game_archives(game_dir: String) -> Result<Vec<DiscoveredArchiveItem>, String> {
+    let root = expand_home_path(game_dir.trim());
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut results = Vec::new();
+
+    if root.is_file() {
+        if let Some(fmt) = detect_archive_format(&root) {
+            let size_bytes = fs::metadata(&root).map(|m| m.len()).unwrap_or(0);
+            results.push(DiscoveredArchiveItem {
+                file_name: root.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                file_path: root.to_string_lossy().to_string(),
+                relative_path: root.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                format: fmt,
+                size_bytes,
+            });
+        }
+        return Ok(results);
+    }
+
+    fn visit_archives(
+        base: &Path,
+        directory: &Path,
+        depth: usize,
+        results: &mut Vec<DiscoveredArchiveItem>,
+    ) {
+        if depth > 4 {
+            return;
+        }
+        let Ok(entries) = fs::read_dir(directory) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') || name == "__MACOSX" {
+                continue;
+            }
+            if path.is_dir() {
+                visit_archives(base, &path, depth + 1, results);
+            } else if path.is_file() {
+                if let Some(fmt) = detect_archive_format(&path) {
+                    let size_bytes = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+                    let relative_path = path
+                        .strip_prefix(base)
+                        .unwrap_or(&path)
+                        .to_string_lossy()
+                        .to_string();
+                    results.push(DiscoveredArchiveItem {
+                        file_name: name,
+                        file_path: path.to_string_lossy().to_string(),
+                        relative_path,
+                        format: fmt,
+                        size_bytes,
+                    });
+                }
+            }
+        }
+    }
+
+    visit_archives(&root, &root, 0, &mut results);
+    results.sort_by(|a, b| a.file_name.to_lowercase().cmp(&b.file_name.to_lowercase()));
+    Ok(results)
+}
+
+fn try_extract_with_cli(tool_name: &str, args: &[&str]) -> bool {
+    let candidate_paths = [
+        tool_name.to_string(),
+        format!("/opt/homebrew/bin/{}", tool_name),
+        format!("/usr/local/bin/{}", tool_name),
+        format!("/usr/bin/{}", tool_name),
+    ];
+    for bin in &candidate_paths {
+        if let Ok(status) = Command::new(bin).args(args).status() {
+            if status.success() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+#[tauri::command]
+fn unpack_game_archive(
+    archive_path: String,
+    destination_folder: String,
+    flatten_single_root: bool,
+    delete_archive_after: bool,
+) -> Result<UnpackArchiveResult, String> {
+    let archive_p = expand_home_path(archive_path.trim());
+    let dest_p = expand_home_path(destination_folder.trim());
+    if !archive_p.is_file() {
+        return Err(format!(
+            "Archive file '{}' was not found.",
+            archive_p.display()
+        ));
+    }
+    fs::create_dir_all(&dest_p).map_err(|e| {
+        format!(
+            "Failed to create destination directory '{}': {e}",
+            dest_p.display()
+        )
+    })?;
+
+    let zip_res = extract_zip_safely(&archive_p, &dest_p);
+    if zip_res.is_err() {
+        let dest_str = dest_p.to_string_lossy().to_string();
+        let archive_str = archive_p.to_string_lossy().to_string();
+
+        let mut extracted = false;
+
+        // 1. Try innoextract (specialized for OldGames.sk and Inno Setup Windows packages)
+        if !extracted {
+            extracted = try_extract_with_cli("innoextract", &["--extract", "--output-dir", &dest_str, &archive_str])
+                || try_extract_with_cli("innoextract", &["-e", "-d", &dest_str, &archive_str]);
+        }
+
+        // 2. Try 7z / 7zz / 7za
+        if !extracted {
+            let out_arg = format!("-o{}", dest_str);
+            extracted = try_extract_with_cli("7z", &["x", "-y", &out_arg, &archive_str])
+                || try_extract_with_cli("7zz", &["x", "-y", &out_arg, &archive_str])
+                || try_extract_with_cli("7za", &["x", "-y", &out_arg, &archive_str]);
+        }
+
+        // 3. Try unar
+        if !extracted {
+            extracted = try_extract_with_cli("unar", &["-force-overwrite", "-output-directory", &dest_str, &archive_str]);
+        }
+
+        // 4. Try tar / unzip
+        if !extracted {
+            extracted = try_extract_with_cli("tar", &["-xf", &archive_str, "-C", &dest_str]);
+        }
+
+        if !extracted {
+            let filename = archive_p.file_name().unwrap_or_default().to_string_lossy();
+            let is_inno_or_sfx = filename.to_lowercase().contains("package") || filename.to_lowercase().ends_with(".exe");
+            let hint = if is_inno_or_sfx {
+                "\n\nThis is a Windows package installer (GOG / Inno Setup / OldGames.sk format).\nTo extract this format automatically on macOS, install innoextract via Homebrew:\n  brew install innoextract\n\nOr extract its contents into the game folder manually."
+            } else {
+                "\n\nTo unpack 7z/RAR archives on macOS, install 7-Zip via Homebrew:\n  brew install sevenzip"
+            };
+            return Err(format!(
+                "Failed to unpack '{}'.{}",
+                filename,
+                hint
+            ));
+        }
+    }
+
+    if flatten_single_root {
+        let _ = flatten_single_root_folder(&dest_p);
+    }
+
+    if delete_archive_after {
+        let _ = fs::remove_file(&archive_p);
+    }
+
+    let gog_layout = detect_gog_layout(&dest_p);
+    if gog_layout.is_some() {
+        prune_gog_installer_scaffolding(&dest_p);
+    }
+
+    let mut files = Vec::new();
+    collect_executable_files(&dest_p, 0, &mut files);
+    let mut candidates = files
+        .iter()
+        .map(|path| score_executable(&dest_p, path))
+        .collect::<Vec<_>>();
+    candidates.sort_by(|left, right| {
+        right
+            .score
+            .cmp(&left.score)
+            .then_with(|| left.absolute_path.cmp(&right.absolute_path))
+    });
+
+    let best_game = candidates.iter().find(|c| c.role == "game");
+    let (mut disc_exe, mut disc_work) = match best_game {
+        Some(c) => (Some(c.executable.clone()), Some(c.working_dir.clone())),
+        None => (None, None),
+    };
+
+    let installers = candidates
+        .into_iter()
+        .filter(|c| c.role == "installer" || c.role == "configuration")
+        .collect::<Vec<_>>();
+
+    let mut cd_media = discover_cd_media(&dest_p);
+
+    // GOG ships the launch target and disc image explicitly; trust that over heuristics.
+    if let Some(layout) = &gog_layout {
+        if let Some(exe) = &layout.executable {
+            disc_exe = Some(exe.clone());
+            disc_work = Some(String::new());
+        }
+        if let Some(cd) = &layout.cd_rom_path {
+            cd_media = Some(cd.clone());
+        }
+    }
+
+    let message = match gog_layout.as_ref().and_then(|l| l.title.as_ref()) {
+        Some(title) => format!("Unpacked GOG release '{title}' into '{}'.", dest_p.display()),
+        None => format!("Successfully unpacked archive into '{}'.", dest_p.display()),
+    };
+
+    Ok(UnpackArchiveResult {
+        success: true,
+        message,
+        extracted_files_count: files.len(),
+        discovered_executable: disc_exe,
+        discovered_working_dir: disc_work,
+        discovered_cd_rom_path: cd_media,
+        discovered_title: gog_layout.and_then(|l| l.title),
+        installer_candidates: installers,
+    })
+}
+
+#[tauri::command]
+fn ensure_dos_tools(app: tauri::AppHandle) -> Result<String, String> {
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {e}"))?;
+    let tools_dir = app_data.join("dos-tools");
+    fs::create_dir_all(&tools_dir)
+        .map_err(|e| format!("Failed to create dos-tools directory: {e}"))?;
+
+    let nc_bat = tools_dir.join("NC.BAT");
+    if !nc_bat.exists() {
+        let nc_bat_content = "@echo off\r\n\
+if exist y:\\nc.exe (\r\n\
+    y:\\nc.exe\r\n\
+    goto end\r\n\
+)\r\n\
+if exist y:\\vc.com (\r\n\
+    y:\\vc.com\r\n\
+    goto end\r\n\
+)\r\n\
+if exist y:\\dn.com (\r\n\
+    y:\\dn.com\r\n\
+    goto end\r\n\
+)\r\n\
+if exist c:\\nc\\nc.exe (\r\n\
+    c:\\nc\\nc.exe\r\n\
+    goto end\r\n\
+)\r\n\
+if exist c:\\vc\\vc.com (\r\n\
+    c:\\vc\\vc.com\r\n\
+    goto end\r\n\
+)\r\n\
+echo ====================================================\r\n\
+echo   GameSky.space - DOS File Manager Tools (Drive Y:)\r\n\
+echo ====================================================\r\n\
+echo.\r\n\
+echo To use Norton Commander or Volkov Commander:\r\n\
+echo Copy NC.EXE or VC.COM into this tools folder (Y:\\)\r\n\
+echo or configure a custom path in Settings.\r\n\
+echo.\r\n\
+echo Current drive C: contains the game files.\r\n\
+echo.\r\n\
+dir /w\r\n\
+:end\r\n";
+        let _ = fs::write(&nc_bat, nc_bat_content);
+    }
+
+    let readme = tools_dir.join("README.TXT");
+    if !readme.exists() {
+        let readme_content = "GameSky.space - DOS Tools Directory\r\n\
+=====================================\r\n\
+\r\n\
+Files in this folder are mounted as Drive Y:\\ in DOSBox.\r\n\
+\r\n\
+You can copy your own retro utilities here:\r\n\
+- NC.EXE (Norton Commander)\r\n\
+- VC.COM (Volkov Commander)\r\n\
+- DN.COM (DOS Navigator)\r\n\
+- PKUNZIP.EXE, ARJ.EXE, UNRAR.EXE (DOS Archivers)\r\n\
+";
+        let _ = fs::write(&readme, readme_content);
+    }
+
+    Ok(tools_dir.to_string_lossy().to_string())
 }
 
 fn download_and_install_archive_game_blocking(
@@ -1864,7 +2533,79 @@ fn prepare_game_launch(
 
     let relative_working_dir = safe_relative_dos_path(working_dir.trim(), "working directory")?;
     let relative_executable = safe_relative_dos_path(executable.trim(), "executable")?;
-    let launch_dir = canonical_root.join(&relative_working_dir);
+
+    let wdir_str = relative_working_dir.to_string_lossy().to_string();
+    let wdir_normalized = wdir_str.replace('\\', "/");
+    let exe_str = relative_executable.to_string_lossy().to_string();
+
+    // Detect OldGames.sk-style package layout where game_dir contains a "C" subfolder
+    // that represents the C: drive root (e.g. Albion_CD_Czech/C/ALBION/ALBION.EXE).
+    // The original dosbox.play.conf does: mount C C / cd ALBION / ALBION.EXE
+    // We must replicate this: mount C: on the "C" subfolder, strip "C\" from working_dir.
+    let c_subfolder = canonical_root.join("C");
+    let is_oldgames_layout = c_subfolder.is_dir()
+        && (wdir_normalized.starts_with("C/") || wdir_normalized.eq_ignore_ascii_case("C"));
+
+    if is_oldgames_layout {
+        let effective_root: PathBuf = c_subfolder.canonicalize().unwrap_or(c_subfolder);
+        let stripped_wdir = if wdir_normalized.len() > 2 {
+            wdir_normalized[2..].to_string()
+        } else {
+            String::new()
+        };
+
+        let launch_dir = effective_root.join(&stripped_wdir);
+        let canonical_launch_dir = launch_dir.canonicalize().map_err(|_| {
+            format!(
+                "The game working directory '{}' does not exist.",
+                launch_dir.display()
+            )
+        })?;
+        if !canonical_launch_dir.is_dir() || !canonical_launch_dir.starts_with(&canonical_root) {
+            return Err(
+                "The game working directory is outside the installed game folder.".to_string(),
+            );
+        }
+
+        let executable_path = canonical_launch_dir.join(&exe_str);
+        let canonical_executable = executable_path.canonicalize().map_err(|_| {
+            format!(
+                "Executable '{}' was not found. Reinstall the game from Catalog or edit its profile.",
+                executable_path.display()
+            )
+        })?;
+        if !canonical_executable.is_file() || !canonical_executable.starts_with(&canonical_root) {
+            return Err(
+                "The configured executable is outside the installed game folder.".to_string(),
+            );
+        }
+
+        let prepared_cd_rom = if !cd_rom_path.trim().is_empty() {
+            let cd_path = expand_home_path(cd_rom_path.trim());
+            if cd_path.exists() {
+                cd_path
+                    .canonicalize()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|_| cd_path.to_string_lossy().to_string())
+            } else {
+                discover_cd_media(&canonical_root).unwrap_or_default()
+            }
+        } else {
+            discover_cd_media(&canonical_root).unwrap_or_default()
+        };
+
+        harmonize_game_cd_config(&canonical_launch_dir);
+
+        return Ok(PreparedGameLaunch {
+            c_drive_path: effective_root.to_string_lossy().to_string(),
+            working_dir: stripped_wdir.replace('/', "\\"),
+            executable: exe_str.replace('/', "\\"),
+            cd_rom_path: prepared_cd_rom,
+        });
+    }
+
+    // Standard layout: collapse working_dir into c_drive_path (mount exe dir as C:)
+    let launch_dir = canonical_root.join(&wdir_normalized);
     let canonical_launch_dir = launch_dir.canonicalize().map_err(|_| {
         format!(
             "The game working directory '{}' does not exist.",
@@ -1875,7 +2616,7 @@ fn prepare_game_launch(
         return Err("The game working directory is outside the installed game folder.".to_string());
     }
 
-    let executable_path = canonical_launch_dir.join(&relative_executable);
+    let executable_path = canonical_launch_dir.join(&exe_str);
     let canonical_executable = executable_path.canonicalize().map_err(|_| {
         format!(
             "Executable '{}' was not found. Reinstall the game from Catalog or edit its profile.",
@@ -1886,45 +2627,297 @@ fn prepare_game_launch(
         return Err("The configured executable is outside the installed game folder.".to_string());
     }
 
-    let prepared_cd_rom = if cd_rom_path.trim().is_empty() {
-        String::new()
-    } else {
+    let prepared_cd_rom = if !cd_rom_path.trim().is_empty() {
         let cd_path = expand_home_path(cd_rom_path.trim());
-        let canonical_cd = cd_path.canonicalize().map_err(|_| {
-            format!(
-                "CD-ROM media was not found at '{}'. Select the image or mounted disc again.",
-                cd_path.display()
-            )
-        })?;
-        if canonical_cd.is_file() {
-            let extension = canonical_cd
-                .extension()
-                .and_then(|value| value.to_str())
-                .unwrap_or("")
-                .to_ascii_lowercase();
-            if !matches!(
-                extension.as_str(),
-                "iso" | "cue" | "bin" | "img" | "nrg" | "mds" | "mdf"
-            ) {
-                return Err(
-                    "Unsupported CD image. Select an ISO, CUE, BIN, IMG, NRG, MDS/MDF, or a mounted disc folder."
-                        .to_string(),
-                );
-            }
-        } else if !canonical_cd.is_dir() {
-            return Err("The selected CD-ROM media is neither an image nor a folder.".to_string());
+        if cd_path.exists() {
+            cd_path
+                .canonicalize()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| cd_path.to_string_lossy().to_string())
+        } else {
+            discover_cd_media(&canonical_root).unwrap_or_default()
         }
-        canonical_cd.to_string_lossy().to_string()
+    } else {
+        discover_cd_media(&canonical_root).unwrap_or_default()
     };
 
+    harmonize_game_cd_config(&canonical_launch_dir);
+
     Ok(PreparedGameLaunch {
-        // Mount the executable's directory directly as C:. Besides being simpler for
-        // games, this avoids DOS 8.3 aliases for long host-side directory names.
         c_drive_path: canonical_launch_dir.to_string_lossy().to_string(),
         working_dir: String::new(),
-        executable: executable.trim().replace('/', "\\"),
+        executable: exe_str.replace('/', "\\"),
         cd_rom_path: prepared_cd_rom,
     })
+}
+
+fn clean_game_package_title(name: &str) -> String {
+    let mut s = name.to_string();
+    for ext in &[".exe", ".zip", ".7z", ".rar", ".arj", ".lha", ".lzh", ".tar.gz"] {
+        if s.to_ascii_lowercase().ends_with(ext) {
+            s = s[..s.len() - ext.len()].to_string();
+            break;
+        }
+    }
+    s = s.replace("-Package", "")
+        .replace(".Package", "")
+        .replace("_Package", "")
+        .replace("Package", "")
+        .replace("www.oldgames.sk", "")
+        .replace("oldgames.sk", "")
+        .replace(['_', '.', '-'], " ");
+    let cleaned = s.split_whitespace().collect::<Vec<_>>().join(" ");
+    if cleaned.is_empty() {
+        name.to_string()
+    } else {
+        cleaned
+    }
+}
+
+fn clean_game_package_folder_name(name: &str) -> String {
+    let title = clean_game_package_title(name);
+    let mut folder = title
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .collect::<String>();
+    while folder.contains("__") {
+        folder = folder.replace("__", "_");
+    }
+    let res = folder.trim_matches('_').to_string();
+    if res.is_empty() {
+        "GAME".to_string()
+    } else {
+        res
+    }
+}
+
+fn is_placeholder_cd_dir(dir: &Path) -> bool {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return true;
+    };
+    let mut file_count = 0;
+    let mut total_bytes = 0u64;
+    for entry in entries.flatten() {
+        if let Ok(meta) = entry.metadata() {
+            if meta.is_file() {
+                file_count += 1;
+                total_bytes += meta.len();
+            } else if meta.is_dir() {
+                return false;
+            }
+        }
+    }
+    file_count <= 2 && total_bytes < 100_000
+}
+
+fn harmonize_game_cd_config(launch_dir: &Path) {
+    if let Ok(entries) = fs::read_dir(launch_dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
+                if ext.eq_ignore_ascii_case("ini") || ext.eq_ignore_ascii_case("cfg") {
+                    if let Ok(content) = fs::read_to_string(&p) {
+                        let mut modified = false;
+                        let mut new_lines = Vec::new();
+                        for line in content.lines() {
+                            let trimmed = line.trim();
+                            let upper = trimmed.to_uppercase();
+                            if upper.starts_with("SOURCE_PATH")
+                                || upper.starts_with("CD_PATH")
+                                || upper.starts_with("CDROM")
+                                || upper.starts_with("CD_DRIVE")
+                            {
+                                let key = trimmed.split('=').next().unwrap_or("SOURCE_PATH").trim();
+                                new_lines.push(format!("{} = D:\\", key));
+                                modified = true;
+                                continue;
+                            }
+                            new_lines.push(line.to_string());
+                        }
+                        if modified {
+                            let _ = fs::write(&p, new_lines.join("\r\n"));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn discover_cd_media(game_dir: &Path) -> Option<String> {
+    if !game_dir.exists() {
+        return None;
+    }
+
+    // 0. Check if an embedded dosbox.conf specifies a CD mount
+    let mut conf_files = Vec::new();
+    fn find_confs(dir: &Path, list: &mut Vec<PathBuf>, depth: usize) {
+        if depth > 4 {
+            return;
+        }
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_dir() {
+                    find_confs(&p, list, depth + 1);
+                } else if p.is_file() {
+                    if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
+                        if ext.eq_ignore_ascii_case("conf") {
+                            list.push(p);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    find_confs(game_dir, &mut conf_files, 0);
+
+    for conf_p in conf_files {
+        if let Ok(content) = fs::read_to_string(&conf_p) {
+            let mut in_autoexec = false;
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with('[') {
+                    in_autoexec = trimmed.eq_ignore_ascii_case("[autoexec]");
+                    continue;
+                }
+                if !in_autoexec || trimmed.is_empty() || trimmed.starts_with('#') {
+                    continue;
+                }
+                let lower = trimmed.to_lowercase();
+                if lower.starts_with("mount d ") || lower.starts_with("imgmount d ") {
+                    let extracted_path = if let Some(start_q) = trimmed.find('"') {
+                        if let Some(end_q) = trimmed[start_q + 1..].find('"') {
+                            Some(trimmed[start_q + 1..start_q + 1 + end_q].to_string())
+                        } else {
+                            None
+                        }
+                    } else {
+                        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                        if parts.len() >= 3 {
+                            Some(parts[2].to_string())
+                        } else {
+                            None
+                        }
+                    };
+
+                    if let Some(rel) = extracted_path {
+                        let rel_clean = rel
+                            .trim_start_matches('.')
+                            .trim_start_matches('/')
+                            .trim_start_matches('\\');
+                        let candidate1 = game_dir.join(rel_clean);
+                        if candidate1.exists() && !is_placeholder_cd_dir(&candidate1) {
+                            return Some(candidate1.to_string_lossy().to_string());
+                        }
+                        if let Some(parent) = conf_p.parent() {
+                            let candidate2 = parent.join(rel_clean);
+                            if candidate2.exists() && !is_placeholder_cd_dir(&candidate2) {
+                                return Some(candidate2.to_string_lossy().to_string());
+                            }
+                            if let Some(grandparent) = parent.parent() {
+                                let candidate3 = grandparent.join(rel_clean);
+                                if candidate3.exists() && !is_placeholder_cd_dir(&candidate3) {
+                                    return Some(candidate3.to_string_lossy().to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 1. Look for optical disc image files (.iso, .cue, .bin, .img, .nrg, .mds, .mdf)
+    let mut image_candidates: Vec<PathBuf> = Vec::new();
+    fn visit_for_images(dir: &Path, candidates: &mut Vec<PathBuf>, depth: usize) {
+        if depth > 5 {
+            return;
+        }
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with('.') || name == "__MACOSX" {
+                    continue;
+                }
+                if path.is_dir() {
+                    visit_for_images(&path, candidates, depth + 1);
+                } else if path.is_file() {
+                    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                        let ext_lower = ext.to_lowercase();
+                        if matches!(ext_lower.as_str(), "iso" | "cue" | "ins" | "bin" | "img" | "nrg" | "mds" | "mdf") {
+                            candidates.push(path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    visit_for_images(game_dir, &mut image_candidates, 0);
+    if let Some(ins) = image_candidates.iter().find(|p| p.extension().map(|e| e.to_string_lossy().eq_ignore_ascii_case("ins")).unwrap_or(false)) {
+        return Some(ins.to_string_lossy().to_string());
+    }
+    if let Some(cue) = image_candidates.iter().find(|p| p.extension().map(|e| e.to_string_lossy().eq_ignore_ascii_case("cue")).unwrap_or(false)) {
+        return Some(cue.to_string_lossy().to_string());
+    }
+    if let Some(iso) = image_candidates.iter().find(|p| p.extension().map(|e| e.to_string_lossy().eq_ignore_ascii_case("iso")).unwrap_or(false)) {
+        return Some(iso.to_string_lossy().to_string());
+    }
+    if let Some(first) = image_candidates.first() {
+        return Some(first.to_string_lossy().to_string());
+    }
+
+    // 2. Look for dedicated CD directory (e.g. app/CD, CD, CDROM, DISC, DISC1, CD1, app/CDROM)
+    let cd_folder_names = [
+        "app/CD", "app/CDROM", "app/DISC", "CD", "CDROM", "DISC", "DISC1", "CD1", "IMAGE",
+        "IMAGES", "C/ALBIONCD", "ALBIONCD",
+    ];
+    for candidate in &cd_folder_names {
+        let p = game_dir.join(candidate);
+        if p.is_dir() && !is_placeholder_cd_dir(&p) {
+            return Some(p.to_string_lossy().to_string());
+        }
+    }
+
+    // 3. Search recursively for any folder named CD, CDROM, or ending with CD (e.g. ALBIONCD)
+    let mut cd_dirs: Vec<PathBuf> = Vec::new();
+    fn visit_for_cd_dirs(dir: &Path, candidates: &mut Vec<PathBuf>, depth: usize) {
+        if depth > 4 {
+            return;
+        }
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with('.') || name == "__MACOSX" {
+                    continue;
+                }
+                if path.is_dir() {
+                    let lower = name.to_ascii_lowercase();
+                    if (lower == "cd"
+                        || lower == "cdrom"
+                        || lower == "disc"
+                        || lower == "disc1"
+                        || lower.ends_with("cd")
+                        || lower.ends_with("cdrom")
+                        || lower.contains("_cd"))
+                        && !is_placeholder_cd_dir(&path)
+                    {
+                        candidates.push(path.clone());
+                    }
+                    visit_for_cd_dirs(&path, candidates, depth + 1);
+                }
+            }
+        }
+    }
+    visit_for_cd_dirs(game_dir, &mut cd_dirs, 0);
+    if let Some(first_cd) = cd_dirs.first() {
+        return Some(first_cd.to_string_lossy().to_string());
+    }
+
+    // 4. If game has full install, mount the game directory itself as CD
+    Some(game_dir.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -1941,33 +2934,122 @@ fn scan_installed_games(base_dir: String) -> Result<Vec<DiscoveredGame>, String>
     }
 
     let mut games = Vec::new();
+    let mut discovered_slugs = std::collections::HashSet::new();
+
     let entries = fs::read_dir(&root)
-        .map_err(|e| format!("Failed to scan game library '{}': {e}", root.display()))?;
-    for entry in entries.flatten() {
+        .map_err(|e| format!("Failed to scan game library '{}': {e}", root.display()))?
+        .flatten()
+        .collect::<Vec<_>>();
+
+    // 1. Process directories first
+    for entry in &entries {
         let Ok(file_type) = entry.file_type() else {
             continue;
         };
         if !file_type.is_dir() || file_type.is_symlink() {
             continue;
         }
-        let folder = entry.path();
-        let Some((working_dir, executable)) = discover_executable(&folder, None) else {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        let name_lower = name.to_ascii_lowercase();
+        if name.starts_with('.')
+            || matches!(
+                name_lower.as_str(),
+                "__macosx"
+                    | "app"
+                    | "tmp"
+                    | "temp"
+                    | "tools"
+                    | "dosbox"
+                    | "capture"
+                    | "docs"
+                    | "documentation"
+                    | "saves"
+            )
+        {
+            continue;
+        }
+
+        let slug = name.to_ascii_lowercase().replace(['_', '-', '.'], " ");
+        let normalized_slug = slug.split_whitespace().collect::<Vec<_>>().join(" ");
+
+        if let Some((working_dir, executable)) = discover_executable(&path, None) {
+            let title = entry
+                .file_name()
+                .to_string_lossy()
+                .replace(['_', '-'], " ")
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            let cd_rom_path = discover_cd_media(&path);
+            discovered_slugs.insert(normalized_slug);
+            discovered_slugs.insert(title.to_ascii_lowercase());
+            games.push(DiscoveredGame {
+                title,
+                target_folder: path.to_string_lossy().to_string(),
+                working_dir,
+                executable,
+                cd_rom_path,
+            });
+        } else {
+            // Check if directory has an archive inside it
+            let archives = scan_game_archives(path.to_string_lossy().to_string()).unwrap_or_default();
+            if let Some(first_archive) = archives.first() {
+                let title = clean_game_package_title(&name);
+                let cd_rom_path = discover_cd_media(&path);
+                discovered_slugs.insert(normalized_slug);
+                discovered_slugs.insert(title.to_ascii_lowercase());
+                games.push(DiscoveredGame {
+                    title,
+                    target_folder: path.to_string_lossy().to_string(),
+                    working_dir: String::new(),
+                    executable: first_archive.file_name.clone(),
+                    cd_rom_path,
+                });
+            }
+        }
+    }
+
+    // 2. Process standalone package / archive files only if not already extracted
+    for entry in &entries {
+        let Ok(file_type) = entry.file_type() else {
             continue;
         };
-        let title = entry
-            .file_name()
-            .to_string_lossy()
-            .replace(['_', '-'], " ")
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ");
-        games.push(DiscoveredGame {
-            title,
-            target_folder: folder.to_string_lossy().to_string(),
-            working_dir,
-            executable,
-        });
+        if !file_type.is_file() || file_type.is_symlink() {
+            continue;
+        }
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') || name == "__MACOSX" {
+            continue;
+        }
+
+        if let Some(_fmt) = detect_archive_format(&path) {
+            let title = clean_game_package_title(&name);
+            let slug = title.to_ascii_lowercase();
+
+            // Check if this game was already registered from an extracted folder
+            if discovered_slugs.iter().any(|s| slug.contains(s) || s.contains(&slug)) {
+                continue;
+            }
+
+            let folder_name = clean_game_package_folder_name(&name);
+            let dedicated_folder = root.join(&folder_name);
+            if dedicated_folder.is_dir() {
+                continue;
+            }
+
+            discovered_slugs.insert(slug);
+            games.push(DiscoveredGame {
+                title,
+                target_folder: path.to_string_lossy().to_string(),
+                working_dir: String::new(),
+                executable: name,
+                cd_rom_path: None,
+            });
+        }
     }
+
     games.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
     Ok(games)
 }
@@ -2260,13 +3342,17 @@ pub fn run() {
             delete_save_backup,
             open_folder_in_finder,
             cache_artwork,
+            import_artwork_file,
             open_catalog_source,
             download_and_install_archive_game,
             prepare_game_launch,
             scan_installed_games,
             launch_dosbox_command,
             detect_dosbox_installations,
-            toggle_app_fullscreen
+            toggle_app_fullscreen,
+            scan_game_archives,
+            unpack_game_archive,
+            ensure_dos_tools
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -2432,9 +3518,140 @@ mod tests {
             Some("B4B8B772".to_string()),
         )
         .expect("download and install FreeDOS package");
-
         assert!(result.installed);
         assert_eq!(result.executable, "DOSDEF.COM");
         assert_eq!(result.working_dir, "GAMES\\DOSDEF");
+    }
+
+    #[test]
+    fn archive_scanning_and_unpacking_works() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let zip_file = temp.path().join("game_archive.zip");
+        let dest = temp.path().join("EXTRACTED");
+
+        // Create a test zip archive with a nested folder
+        {
+            let file = File::create(&zip_file).expect("create test zip");
+            let mut zip = ZipWriter::new(file);
+            let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+            zip.start_file("MYGAME/PLAY.EXE", options).expect("zip file entry");
+            zip.write_all(b"dummy game executable").expect("write zip content");
+            zip.start_file("MYGAME/SETUP.EXE", options).expect("zip setup entry");
+            zip.write_all(b"dummy setup executable").expect("write zip content");
+            zip.finish().expect("finish zip");
+        }
+
+        // Test scanning
+        let archives = scan_game_archives(temp.path().to_string_lossy().to_string()).expect("scan");
+        assert_eq!(archives.len(), 1);
+        assert_eq!(archives[0].file_name, "game_archive.zip");
+        assert_eq!(archives[0].format, "zip");
+
+        // Test unpacking with unnesting
+        let unpack = unpack_game_archive(
+            zip_file.to_string_lossy().to_string(),
+            dest.to_string_lossy().to_string(),
+            true,
+            false,
+        )
+        .expect("unpack archive");
+
+        assert!(unpack.success);
+        assert_eq!(unpack.discovered_executable, Some("PLAY.EXE".to_string()));
+        assert!(dest.join("PLAY.EXE").is_file());
+        assert!(dest.join("SETUP.EXE").is_file());
+        assert!(!unpack.installer_candidates.is_empty());
+    }
+
+    #[test]
+    fn gog_layout_is_read_from_bundled_metadata() {
+        let temp = std::env::temp_dir().join("gamesky_gog_layout_test");
+        let _ = fs::remove_dir_all(&temp);
+        fs::create_dir_all(temp.join("__support").join("app")).unwrap();
+
+        fs::write(
+            temp.join("goggame-1436955815.info"),
+            r#"{"name":"Albion","gameId":"1436955815"}"#,
+        )
+        .unwrap();
+        fs::write(temp.join("game.ins"), "FILE \"game.gog\" BINARY\n").unwrap();
+        fs::write(temp.join("ALBION.EXE"), "MZ").unwrap();
+        fs::write(temp.join("SETUP.EXE"), "MZ").unwrap();
+        fs::write(
+            temp.join("__support").join("app").join("dosbox_x_single.conf"),
+            "[autoexec]\nmount c \"..\"\nimgmount d \"..\\game.ins\" -t iso -fs iso\nc:\n:game\nALBION.EXE\n:setup\nsetup.exe\n",
+        )
+        .unwrap();
+
+        let layout = detect_gog_layout(&temp).expect("GOG layout should be detected");
+        assert_eq!(layout.title.as_deref(), Some("Albion"));
+        assert_eq!(layout.executable.as_deref(), Some("ALBION.EXE"));
+        assert!(layout.cd_rom_path.as_deref().unwrap().ends_with("game.ins"));
+
+        // A plain DOS folder must not be mistaken for a GOG release.
+        let plain = std::env::temp_dir().join("gamesky_plain_layout_test");
+        let _ = fs::remove_dir_all(&plain);
+        fs::create_dir_all(&plain).unwrap();
+        fs::write(plain.join("ALBION.EXE"), "MZ").unwrap();
+        assert!(detect_gog_layout(&plain).is_none());
+
+        let _ = fs::remove_dir_all(&temp);
+        let _ = fs::remove_dir_all(&plain);
+    }
+
+    #[test]
+    fn artwork_import_accepts_only_real_images() {
+        let png = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0, 0];
+        assert_eq!(image_extension_from_bytes(&png), Some("png"));
+        assert_eq!(image_extension_from_bytes(&[0xff, 0xd8, 0xff, 0xe0]), Some("jpg"));
+        assert_eq!(image_extension_from_bytes(b"GIF89a...."), Some("gif"));
+
+        let mut webp = Vec::from(*b"RIFF");
+        webp.extend_from_slice(&[0, 0, 0, 0]);
+        webp.extend_from_slice(b"WEBP");
+        assert_eq!(image_extension_from_bytes(&webp), Some("webp"));
+
+        // An executable renamed to .png must not reach the artwork cache.
+        assert_eq!(image_extension_from_bytes(b"MZ\x90\x00"), None);
+        assert_eq!(image_extension_from_bytes(b""), None);
+        assert_eq!(image_extension_from_bytes(b"RIFF____AVI "), None);
+    }
+
+    #[test]
+    fn artwork_import_replaces_previous_cover() {
+        let dir = std::env::temp_dir().join("gamesky_artwork_import_test");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let png_path = dir.join("source.png");
+        let mut png = vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+        png.extend_from_slice(&[0u8; 32]);
+        fs::write(&png_path, &png).unwrap();
+
+        let first = import_artwork_into(&dir, "game-local-abc", png_path.to_str().unwrap(), 1000)
+            .expect("import should succeed");
+        assert!(PathBuf::from(&first).is_file());
+        assert!(first.ends_with("game-local-abc-custom-1000.png"));
+
+        // Re-importing must leave exactly one cover, under a fresh name.
+        let second = import_artwork_into(&dir, "game-local-abc", png_path.to_str().unwrap(), 2000)
+            .expect("second import should succeed");
+        assert!(second.ends_with("game-local-abc-custom-2000.png"));
+        assert!(!PathBuf::from(&first).exists(), "old cover should be removed");
+        let covers = fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().starts_with("game-local-abc-custom-"))
+            .count();
+        assert_eq!(covers, 1);
+
+        // A non-image and a traversal-style id must both be refused.
+        let fake = dir.join("fake.png");
+        fs::write(&fake, b"MZ\x90 not an image").unwrap();
+        assert!(import_artwork_into(&dir, "game-local-abc", fake.to_str().unwrap(), 3000).is_err());
+        assert!(import_artwork_into(&dir, "../escape", png_path.to_str().unwrap(), 4000).is_err());
+        assert!(import_artwork_into(&dir, "game-local-abc", "/nope/missing.png", 5000).is_err());
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

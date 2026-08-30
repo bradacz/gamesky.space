@@ -29,6 +29,7 @@ export interface DiscoveredGame {
   targetFolder: string;
   workingDir: string;
   executable: string;
+  cdRomPath?: string;
 }
 
 export interface ExecutableCandidate {
@@ -82,7 +83,11 @@ export class EmulatorLauncher {
     }
   }
 
-  public static async launchGame(game: GameProfile, prefs: AppPreferences): Promise<LaunchResult> {
+  public static async launchGame(
+    game: GameProfile,
+    prefs: AppPreferences,
+    options?: import('./confGenerator').GenerateConfOptions
+  ): Promise<LaunchResult> {
     const emuType = game.settings.emulatorType || prefs.activeEmulator;
     
     let binaryPath = prefs.dosboxPath;
@@ -94,7 +99,29 @@ export class EmulatorLauncher {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
         const preparedGame = await this.prepareGame(game);
-        const conf = generateDosboxConf(preparedGame);
+        
+        let toolsMountPath = options?.toolsMountPath;
+        const customNC = options?.customNortonCommanderPath || prefs.customNortonCommanderPath;
+        if (options?.mode === 'file-manager' && !toolsMountPath) {
+          if (customNC && customNC.trim() !== '') {
+            const trimmed = customNC.trim();
+            if (/\.(exe|com|bat)$/i.test(trimmed)) {
+              const lastSlash = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'));
+              toolsMountPath = lastSlash > 0 ? trimmed.substring(0, lastSlash) : trimmed;
+            } else {
+              toolsMountPath = trimmed;
+            }
+          } else {
+            toolsMountPath = await this.ensureDosTools();
+          }
+        }
+
+        const conf = generateDosboxConf(preparedGame, {
+          ...options,
+          toolsMountPath,
+          customNortonCommanderPath: options?.customNortonCommanderPath || prefs.customNortonCommanderPath
+        });
+
         const res = await invoke<LaunchResult>('launch_dosbox_command', {
           binaryPath,
           confContent: conf,
@@ -113,7 +140,7 @@ export class EmulatorLauncher {
     }
 
     // Web / Standalone mode fallback
-    const conf = generateDosboxConf(game);
+    const conf = generateDosboxConf(game, options);
     const cliCommand = `"${binaryPath}" -conf dosbox_${game.id}.conf`;
     return {
       success: true,
@@ -121,6 +148,71 @@ export class EmulatorLauncher {
       commandExecuted: cliCommand,
       confGenerated: conf
     };
+  }
+
+  public static async launchFileManager(game: GameProfile, prefs: AppPreferences): Promise<LaunchResult> {
+    return this.launchGame(game, prefs, {
+      mode: 'file-manager',
+      customNortonCommanderPath: prefs.customNortonCommanderPath
+    });
+  }
+
+  public static async launchInstaller(
+    game: GameProfile,
+    executable: string,
+    workingDir: string,
+    prefs: AppPreferences
+  ): Promise<LaunchResult> {
+    return this.launchGame(game, prefs, {
+      mode: 'installer',
+      overrideExecutable: executable,
+      overrideWorkingDir: workingDir
+    });
+  }
+
+  public static async ensureDosTools(): Promise<string> {
+    if (!this.isTauriEnvironment()) return '';
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      return await invoke<string>('ensure_dos_tools');
+    } catch (err) {
+      console.warn('Failed to ensure DOS tools folder:', err);
+      return '';
+    }
+  }
+
+  public static async scanGameArchives(gameDir: string): Promise<import('../types').DiscoveredArchiveItem[]> {
+    if (!this.isTauriEnvironment()) return [];
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      return await invoke<import('../types').DiscoveredArchiveItem[]>('scan_game_archives', { gameDir });
+    } catch (err) {
+      console.warn('Failed to scan game archives:', err);
+      return [];
+    }
+  }
+
+  public static async unpackGameArchive(
+    archivePath: string,
+    destinationFolder: string,
+    flattenSingleRoot = true,
+    deleteArchiveAfter = false
+  ): Promise<import('../types').UnpackArchiveResult> {
+    if (!this.isTauriEnvironment()) {
+      return {
+        success: false,
+        message: 'Native environment is required to unpack archives.',
+        extractedFilesCount: 0,
+        installerCandidates: []
+      };
+    }
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<import('../types').UnpackArchiveResult>('unpack_game_archive', {
+      archivePath,
+      destinationFolder,
+      flattenSingleRoot,
+      deleteArchiveAfter
+    });
   }
 
   public static async prepareGame(game: GameProfile): Promise<GameProfile> {
@@ -226,7 +318,9 @@ export class EmulatorLauncher {
           title: options?.title || 'Select File',
           extensions: options?.extensions || ['iso', 'cue', 'bin', 'img', 'exe', 'bat', 'com', 'app']
         });
-        if (selected) return selected;
+        // The native picker answered; null means the user cancelled. Falling
+        // through would reopen a second picker whose result is a bare filename.
+        return selected ?? null;
       } catch (err) {
         console.warn('Native pick_file_native failed, trying dialog plugin:', err);
         try {

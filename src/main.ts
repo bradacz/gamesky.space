@@ -143,10 +143,27 @@ const el = {
   cfgXPath: document.getElementById('cfgXPath') as HTMLInputElement,
   cfgDefaultDir: document.getElementById('cfgDefaultDir') as HTMLInputElement,
   cfgThemeSelect: document.getElementById('cfgThemeSelect') as HTMLSelectElement,
+  cfgNortonCommanderPath: document.getElementById('cfgNortonCommanderPath') as HTMLInputElement,
+  btnBrowseNortonCommander: document.getElementById('btnBrowseNortonCommander') as HTMLButtonElement,
+  cfgDeleteArchiveAfterUnpack: document.getElementById('cfgDeleteArchiveAfterUnpack') as HTMLInputElement,
   cfgAudioEnabled: document.getElementById('cfgAudioEnabled') as HTMLInputElement,
   cfgCheckUpdates: document.getElementById('cfgCheckUpdates') as HTMLInputElement,
   btnCheckUpdates: document.getElementById('btnCheckUpdates') as HTMLButtonElement,
   updateStatus: document.getElementById('updateStatus') as HTMLElement,
+
+  // Center Game Actions
+  btnUnpackGameArchive: document.getElementById('btnUnpackGameArchive') as HTMLButtonElement,
+  btnLaunchFileManager: document.getElementById('btnLaunchFileManager') as HTMLButtonElement,
+  btnLaunchSetup: document.getElementById('btnLaunchSetup') as HTMLButtonElement,
+  lblRunDosGame: document.getElementById('lblRunDosGame') as HTMLSpanElement,
+
+  // Post-Install Assistant
+  modalPostInstall: document.getElementById('modalPostInstall') as HTMLDivElement,
+  btnCancelPostInstallX: document.getElementById('btnCancelPostInstallX') as HTMLButtonElement,
+  postInstallDesc: document.getElementById('postInstallDesc') as HTMLParagraphElement,
+  postInstallCandidatesList: document.getElementById('postInstallCandidatesList') as HTMLDivElement,
+  btnApplyPostInstallExe: document.getElementById('btnApplyPostInstallExe') as HTMLButtonElement,
+  btnSkipPostInstall: document.getElementById('btnSkipPostInstall') as HTMLButtonElement,
 
   // Modal: Launch
   modalLaunch: document.getElementById('modalLaunch') as HTMLDivElement,
@@ -173,6 +190,7 @@ const el = {
 
   // Center Game Saves Button
   btnOpenGameSaves: document.getElementById('btnOpenGameSaves') as HTMLButtonElement,
+  btnSetArtwork: document.getElementById('btnSetArtwork') as HTMLButtonElement,
 
   // Modal: Saves & Checkpoints
   modalSaves: document.getElementById('modalSaves') as HTMLDivElement,
@@ -244,6 +262,11 @@ let launchingGameId: string | null = null;
 let editingCdMedia: MediaItem[] = [];
 let editingFloppyMedia: MediaItem[] = [];
 const artworkCacheInFlight = new Set<string>();
+let activeSetupLaunchGameId: string | null = null;
+let postInstallTargetGame: GameProfile | null = null;
+let postInstallSelectedCandidate: import('./services/emulatorLauncher').ExecutableCandidate | null = null;
+let selectedGameSetupCandidate: import('./services/emulatorLauncher').ExecutableCandidate | null = null;
+let selectedGameArchives: import('./types').DiscoveredArchiveItem[] = [];
 
 // --------------------------------------------------------------------------
 // INITIALIZATION
@@ -294,6 +317,11 @@ async function setupNativeSessionListener() {
         renderSelectedGame();
       }
       renderGameList();
+
+      if (activeSetupLaunchGameId === game.id) {
+        activeSetupLaunchGameId = null;
+        void checkPostInstallCandidates(game);
+      }
     });
   } catch (error) {
     console.warn('Game session listener is unavailable:', error);
@@ -319,14 +347,80 @@ async function initializeNativeLibrary() {
   await ensureAvailableEmulatorIsConfigured();
   if (!EmulatorLauncher.isTauriEnvironment()) return;
 
-  const discovered = await EmulatorLauncher.scanInstalledGames(prefs.defaultCDrive || '~/DOSGAMES');
+  const defaultDir = prefs.defaultCDrive || '~/DOSGAMES';
+  const discovered = await EmulatorLauncher.scanInstalledGames(defaultDir);
   let changed = false;
+
+  // 1. Deduplicate in-memory games array by slug and purge orphaned app entries
+  const deduped: GameProfile[] = [];
+  const seenSlugs = new Set<string>();
+  for (const g of games) {
+    const slug = g.title.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    if (
+      slug === 'app' ||
+      g.drives.cDrivePath.endsWith('/app') ||
+      g.title.toLowerCase() === 'app'
+    ) {
+      changed = true;
+      continue;
+    }
+    if (!seenSlugs.has(slug)) {
+      seenSlugs.add(slug);
+      deduped.push(g);
+    } else {
+      changed = true;
+    }
+  }
+  games = deduped;
+
+  // 2. Synchronize with newly discovered items
   for (const installed of discovered) {
-    const exists = games.some(game => game.drives.cDrivePath === installed.targetFolder);
-    if (exists) continue;
+    const slug = installed.title.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const existingIndex = games.findIndex(
+      g => g.title.toLowerCase().replace(/[^a-z0-9]+/g, '') === slug
+    );
+
+    if (existingIndex >= 0) {
+      const existing = games[existingIndex];
+      let updated = false;
+
+      // Update C: drive & executable if discovered target folder is more specific
+      if (
+        installed.targetFolder &&
+        installed.targetFolder !== defaultDir &&
+        existing.drives.cDrivePath !== installed.targetFolder
+      ) {
+        existing.drives.cDrivePath = installed.targetFolder;
+        existing.executable = installed.executable;
+        existing.workingDir = installed.workingDir;
+        updated = true;
+      }
+      // Always synchronize executable if discovered is better (e.g. ALBION.EXE instead of MAIN.EXE)
+      if (installed.executable && existing.executable !== installed.executable) {
+        existing.executable = installed.executable;
+        existing.workingDir = installed.workingDir;
+        updated = true;
+      }
+      // Update CD-ROM path if discovered and not currently set
+      if (
+        installed.cdRomPath &&
+        (!existing.drives.cdRomPath || existing.drives.cdRomPath.trim() === '')
+      ) {
+        existing.drives.cdRomPath = installed.cdRomPath;
+        updated = true;
+      }
+      if (updated) changed = true;
+      continue;
+    }
+
+    const isPackageArchive =
+      installed.executable.toLowerCase().includes('package') ||
+      installed.executable.toLowerCase().endsWith('.zip') ||
+      installed.executable.toLowerCase().endsWith('.7z') ||
+      installed.executable.toLowerCase().endsWith('.rar');
 
     const discoveredProfile: GameProfile = {
-      id: stableLocalGameId(installed.targetFolder),
+      id: stableLocalGameId(installed.targetFolder, installed.executable),
       title: installed.title,
       developer: 'Unknown',
       genre: 'DOS game',
@@ -334,7 +428,7 @@ async function initializeNativeLibrary() {
       workingDir: installed.workingDir,
       drives: {
         cDrivePath: installed.targetFolder,
-        cdRomPath: '',
+        cdRomPath: installed.cdRomPath || '',
         floppyPath: ''
       },
       settings: recommendedSettingsForGame({
@@ -343,7 +437,7 @@ async function initializeNativeLibrary() {
       }, prefs.activeEmulator),
       compatibilityProfileVersion: COMPATIBILITY_PROFILE_VERSION,
       ...compatibilityAssessment({ title: installed.title, genre: 'DOS game' }),
-      installationState: 'ready',
+      installationState: isPackageArchive ? 'needs-attention' : 'ready',
       createdAt: Date.now()
     };
     games.push(discoveredProfile);
@@ -362,10 +456,11 @@ async function initializeNativeLibrary() {
   }
 }
 
-function stableLocalGameId(path: string): string {
+function stableLocalGameId(folder: string, executable = ''): string {
+  const combined = `${folder}::${executable}`;
   let hash = 2166136261;
-  for (let index = 0; index < path.length; index += 1) {
-    hash ^= path.charCodeAt(index);
+  for (let index = 0; index < combined.length; index += 1) {
+    hash ^= combined.charCodeAt(index);
     hash = Math.imul(hash, 16777619);
   }
   return `game-local-${(hash >>> 0).toString(16)}`;
@@ -431,11 +526,13 @@ function applyPreferences() {
 }
 
 function applyTheme(themeName: string) {
-  document.body.classList.remove('theme-norton', 'theme-dos-matrix');
+  document.body.classList.remove('theme-norton', 'theme-dos-matrix', 'theme-apple');
   if (themeName === 'norton-blue') {
     document.body.classList.add('theme-norton');
   } else if (themeName === 'dos-matrix') {
     document.body.classList.add('theme-dos-matrix');
+  } else if (themeName === 'apple-light') {
+    document.body.classList.add('theme-apple');
   }
 }
 
@@ -590,6 +687,14 @@ function renderGameList() {
       void launchGameDirect(game);
     });
 
+    item.addEventListener('contextmenu', event => {
+      event.preventDefault();
+      selectedGameId = game.id;
+      renderGameList();
+      renderSelectedGame();
+      showGameContextMenu(event.clientX, event.clientY, game);
+    });
+
     const playButton = item.querySelector('.game-list-play') as HTMLButtonElement;
     playButton.disabled = launchingGameId !== null;
     playButton.addEventListener('click', event => {
@@ -636,6 +741,10 @@ function renderSelectedGame() {
     el.btnToggleFavorite.disabled = true;
     el.btnDiagnoseGame.disabled = true;
     el.btnGameControls.disabled = true;
+    el.btnLaunchFileManager.disabled = true;
+    el.btnLaunchSetup.style.display = 'none';
+    el.btnUnpackGameArchive.style.display = 'none';
+    if (el.lblRunDosGame) el.lblRunDosGame.textContent = 'RUN GAME';
     return;
   }
 
@@ -700,6 +809,18 @@ function renderSelectedGame() {
   } else {
     el.cdRomDisplay.textContent = '[None]';
     el.cdRomDisplay.style.color = '#555';
+
+    if (game.drives.cDrivePath && EmulatorLauncher.isTauriEnvironment()) {
+      EmulatorLauncher.prepareGame(game).then(prepared => {
+        if (prepared.drives.cdRomPath && prepared.drives.cdRomPath !== game.drives.cdRomPath) {
+          game.drives.cdRomPath = prepared.drives.cdRomPath;
+          StorageService.saveGames(games);
+          const fname = game.drives.cdRomPath.split('/').pop() || game.drives.cdRomPath;
+          el.cdRomDisplay.textContent = `[${fname}]`;
+          el.cdRomDisplay.style.color = '#008000';
+        }
+      }).catch(() => {});
+    }
   }
 
   // Settings Panel
@@ -721,6 +842,8 @@ function renderSelectedGame() {
   el.sbSelectedText.textContent = `${game.title.toUpperCase()} - Selected`;
   el.sbCpuText.textContent = `CPU: Normal [${s.cycles}]`;
   el.btnRunDosGame.disabled = launchingGameId !== null;
+  el.btnLaunchFileManager.disabled = launchingGameId !== null;
+  void updateGameActionButtons(game);
 }
 
 function persistResolvedArtwork(game: GameProfile, url: string) {
@@ -735,6 +858,38 @@ function persistResolvedArtwork(game: GameProfile, url: string) {
         StorageService.saveGames(games);
       }
     }).finally(() => artworkCacheInFlight.delete(game.id));
+  }
+}
+
+async function handleSetArtwork() {
+  const game = getSelectedGame();
+  if (!game) {
+    alert('Select a game first.');
+    return;
+  }
+  if (!EmulatorLauncher.isTauriEnvironment()) return;
+  soundFX.playButtonClick();
+
+  const picked = await EmulatorLauncher.browseForFile({
+    title: `Select cover image for "${game.title}"`,
+    extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif']
+  });
+  if (!picked) return;
+
+  try {
+    const assetUrl = await ArtworkService.importLocalFile(game.id, picked);
+    if (!assetUrl) {
+      alert('Could not import that image.');
+      return;
+    }
+    game.coverImage = assetUrl;
+    StorageService.saveGames(games);
+    renderGameList();
+    renderSelectedGame();
+    el.centerStatus.textContent = 'Status: Artwork updated';
+  } catch (err) {
+    soundFX.playPcSpeakerBeep(260, 0.25);
+    alert(`Could not set artwork:\n${String(err)}`);
   }
 }
 
@@ -781,6 +936,351 @@ async function launchGameDirect(requestedGame: GameProfile) {
   el.btnRunDosGame.querySelector('span:last-child')!.textContent = 'RUN GAME';
   renderGameList();
   el.btnRunDosGame.disabled = false;
+}
+
+async function updateGameActionButtons(game: GameProfile) {
+  if (!EmulatorLauncher.isTauriEnvironment() || !game.drives.cDrivePath) {
+    el.btnUnpackGameArchive.style.display = 'none';
+    el.btnLaunchFileManager.disabled = false;
+    el.btnLaunchSetup.style.display = 'none';
+    if (el.lblRunDosGame) el.lblRunDosGame.textContent = 'RUN GAME';
+    return;
+  }
+
+  // 1. Check archives in game folder or executable path
+  let archives: import('./types').DiscoveredArchiveItem[] = [];
+  try {
+    archives = await EmulatorLauncher.scanGameArchives(game.drives.cDrivePath);
+    if (
+      archives.length === 0 &&
+      (game.executable.toLowerCase().endsWith('.zip') ||
+        game.executable.toLowerCase().includes('package'))
+    ) {
+      const fullPath = `${game.drives.cDrivePath}/${game.executable}`;
+      const single = await EmulatorLauncher.scanGameArchives(fullPath);
+      if (single.length > 0) archives = single;
+    }
+    selectedGameArchives = archives;
+    if (archives.length > 0) {
+      el.btnUnpackGameArchive.style.display = 'inline-flex';
+      el.btnUnpackGameArchive.title = `Unpack archive (${archives[0].fileName})`;
+      if (
+        game.installationState === 'needs-attention' ||
+        game.executable.toLowerCase().endsWith('.zip') ||
+        game.executable.toLowerCase().includes('package')
+      ) {
+        el.centerStatus.textContent = `Status: 📦 Package archive · Click Unpack to extract`;
+        if (el.lblRunDosGame) el.lblRunDosGame.textContent = 'UNPACK & PLAY';
+      } else {
+        if (el.lblRunDosGame) el.lblRunDosGame.textContent = 'RUN GAME';
+      }
+    } else {
+      el.btnUnpackGameArchive.style.display = 'none';
+      if (el.lblRunDosGame) el.lblRunDosGame.textContent = 'RUN GAME';
+    }
+  } catch {
+    selectedGameArchives = [];
+    el.btnUnpackGameArchive.style.display = 'none';
+    if (el.lblRunDosGame) el.lblRunDosGame.textContent = 'RUN GAME';
+  }
+
+  // 2. Check setup/installer candidates
+  try {
+    const candidates = await EmulatorLauncher.inspectGameFolder(game.drives.cDrivePath);
+    const setupCandidate = candidates.find(c => c.role === 'installer' || c.role === 'configuration');
+    selectedGameSetupCandidate = setupCandidate || null;
+    if (setupCandidate) {
+      el.btnLaunchSetup.style.display = 'inline-flex';
+      el.btnLaunchSetup.title = `Run ${setupCandidate.executable}`;
+    } else {
+      el.btnLaunchSetup.style.display = 'none';
+    }
+  } catch {
+    selectedGameSetupCandidate = null;
+    el.btnLaunchSetup.style.display = 'none';
+  }
+}
+
+async function launchFileManagerDirect(requestedGame: GameProfile) {
+  if (launchingGameId) return;
+  selectedGameId = requestedGame.id;
+  const game = requestedGame;
+
+  launchingGameId = game.id;
+  renderSelectedGame();
+  el.centerStatus.textContent = 'Status: Starting DOS File Manager…';
+  el.btnRunDosGame.disabled = true;
+  el.btnLaunchFileManager.disabled = true;
+  soundFX.playLaunchChime();
+
+  const res = await EmulatorLauncher.launchFileManager(game, prefs);
+  launchingGameId = null;
+  el.btnLaunchFileManager.disabled = false;
+  el.btnRunDosGame.disabled = false;
+
+  if (res.success) {
+    el.centerStatus.textContent = 'Status: DOS File Manager Running';
+    el.sbSelectedText.textContent = `${game.title.toUpperCase()} - File Manager`;
+  } else {
+    soundFX.playPcSpeakerBeep(260, 0.25);
+    el.centerStatus.textContent = 'Status: Launch failed';
+    el.launchHeaderMsg.textContent = res.message;
+    el.launchCmdBox.value = res.commandExecuted || '';
+    el.launchConfBox.textContent = res.confGenerated || '';
+    el.modalLaunch.classList.add('open');
+  }
+  renderGameList();
+}
+
+async function launchSetupDirect(
+  requestedGame: GameProfile,
+  candidate: import('./services/emulatorLauncher').ExecutableCandidate
+) {
+  if (launchingGameId) return;
+  selectedGameId = requestedGame.id;
+  const game = requestedGame;
+
+  activeSetupLaunchGameId = game.id;
+  launchingGameId = game.id;
+  renderSelectedGame();
+  el.centerStatus.textContent = `Status: Starting ${candidate.executable}…`;
+  el.btnRunDosGame.disabled = true;
+  el.btnLaunchSetup.disabled = true;
+  soundFX.playLaunchChime();
+
+  const res = await EmulatorLauncher.launchInstaller(game, candidate.executable, candidate.workingDir, prefs);
+  launchingGameId = null;
+  el.btnLaunchSetup.disabled = false;
+  el.btnRunDosGame.disabled = false;
+
+  if (res.success) {
+    el.centerStatus.textContent = `Status: Running ${candidate.executable}`;
+    el.sbSelectedText.textContent = `${game.title.toUpperCase()} - Setup`;
+  } else {
+    soundFX.playPcSpeakerBeep(260, 0.25);
+    el.centerStatus.textContent = 'Status: Launch failed';
+    el.launchHeaderMsg.textContent = res.message;
+    el.launchCmdBox.value = res.commandExecuted || '';
+    el.launchConfBox.textContent = res.confGenerated || '';
+    el.modalLaunch.classList.add('open');
+  }
+  renderGameList();
+}
+
+async function unpackArchiveDirect(game: GameProfile, archivePath: string) {
+  if (!EmulatorLauncher.isTauriEnvironment()) return;
+  soundFX.playButtonClick();
+
+  let destinationFolder = game.drives.cDrivePath;
+  const isDirectFile =
+    archivePath === game.drives.cDrivePath ||
+    !destinationFolder ||
+    destinationFolder === prefs.defaultCDrive;
+  if (isDirectFile) {
+    const cleanSubdir =
+      game.title.replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'GAME';
+    const baseDir = prefs.defaultCDrive || '~/DOSGAMES';
+    destinationFolder = `${baseDir}/${cleanSubdir}`;
+  }
+
+  el.centerStatus.textContent = 'Status: ⏳ Unpacking package archive…';
+  el.btnUnpackGameArchive.disabled = true;
+  if (el.lblRunDosGame) el.lblRunDosGame.textContent = 'UNPACKING…';
+
+  try {
+    const res = await EmulatorLauncher.unpackGameArchive(
+      archivePath,
+      destinationFolder,
+      true,
+      prefs.deleteArchiveAfterUnpack === true
+    );
+
+    el.btnUnpackGameArchive.disabled = false;
+    if (res.success) {
+      soundFX.playLaunchChime();
+      game.drives.cDrivePath = destinationFolder;
+      if (res.discoveredCdRomPath) {
+        game.drives.cdRomPath = res.discoveredCdRomPath;
+      }
+      if (res.discoveredExecutable) {
+        game.executable = res.discoveredExecutable;
+        if (res.discoveredWorkingDir !== undefined) {
+          game.workingDir = res.discoveredWorkingDir;
+        }
+      }
+      if (res.discoveredTitle && res.discoveredTitle.trim() !== '') {
+        game.title = res.discoveredTitle.trim();
+      }
+      game.installationState = 'ready';
+      game.compatibilityConfidence = 'high';
+      game.compatibilityReason = 'Extracted package archive';
+      StorageService.saveGames(games);
+      renderGameList();
+      renderSelectedGame();
+      alert(`Package extracted successfully! Extracted ${res.extractedFilesCount} file(s) into:\n${destinationFolder}${res.discoveredCdRomPath ? `\n\n💿 Auto-mounted CD-ROM media:\n${res.discoveredCdRomPath}` : ''}`);
+    } else {
+      soundFX.playPcSpeakerBeep(260, 0.25);
+      alert(`Failed to unpack archive:\n${res.message}`);
+      renderSelectedGame();
+    }
+  } catch (err) {
+    el.btnUnpackGameArchive.disabled = false;
+    soundFX.playPcSpeakerBeep(260, 0.25);
+    alert(`Error unpacking archive: ${String(err)}`);
+    renderSelectedGame();
+  }
+}
+
+async function checkPostInstallCandidates(game: GameProfile) {
+  if (!EmulatorLauncher.isTauriEnvironment() || !game.drives.cDrivePath) return;
+  try {
+    const candidates = await EmulatorLauncher.inspectGameFolder(game.drives.cDrivePath);
+    const gameExecutables = candidates.filter(c => c.role === 'game');
+    if (gameExecutables.length === 0) return;
+
+    const currentIsInstaller = candidates.some(
+      c => c.executable.toLowerCase() === game.executable.toLowerCase() && (c.role === 'installer' || c.role === 'configuration')
+    );
+    const topCandidate = gameExecutables[0];
+
+    if (currentIsInstaller || (topCandidate && topCandidate.executable.toLowerCase() !== game.executable.toLowerCase())) {
+      postInstallTargetGame = game;
+      postInstallSelectedCandidate = topCandidate;
+      el.postInstallDesc.textContent = `Installation / configuration of "${game.title}" finished. We detected newly configured game executables in this folder:`;
+      el.postInstallCandidatesList.innerHTML = '';
+
+      gameExecutables.forEach((cand, idx) => {
+        const row = document.createElement('div');
+        row.className = `post-install-candidate ${idx === 0 ? 'selected' : ''}`;
+        row.innerHTML = `
+          <div>
+            <strong>${escapeHtml(cand.executable)}</strong>
+            ${cand.workingDir ? `<small style="display:block; opacity:0.8;">Working dir: ${escapeHtml(cand.workingDir)}</small>` : ''}
+          </div>
+          <span style="font-size:11px; opacity:0.8;">${escapeHtml(cand.reason || 'Game')}</span>
+        `;
+        row.addEventListener('click', () => {
+          el.postInstallCandidatesList.querySelectorAll('.post-install-candidate').forEach(r => r.classList.remove('selected'));
+          row.classList.add('selected');
+          postInstallSelectedCandidate = cand;
+        });
+        el.postInstallCandidatesList.appendChild(row);
+      });
+
+      el.modalPostInstall.classList.add('open');
+    }
+  } catch (err) {
+    console.warn('Failed to inspect game folder after install:', err);
+  }
+}
+
+function showGameContextMenu(x: number, y: number, game: GameProfile) {
+  const existing = document.getElementById('retroGameContextMenu');
+  if (existing) existing.remove();
+
+  const menu = document.createElement('div');
+  menu.id = 'retroGameContextMenu';
+  menu.className = 'win-outset';
+  menu.style.position = 'fixed';
+  menu.style.left = `${Math.min(x, window.innerWidth - 220)}px`;
+  menu.style.top = `${Math.min(y, window.innerHeight - 220)}px`;
+  menu.style.zIndex = '99999';
+  menu.style.background = 'var(--win-btn-face, #c0c0c0)';
+  menu.style.padding = '2px';
+  menu.style.minWidth = '210px';
+  menu.style.boxShadow = '2px 2px 5px rgba(0,0,0,0.5)';
+  menu.style.fontFamily = 'var(--font-retro)';
+  menu.style.fontSize = '13px';
+
+  const addItem = (label: string, icon: string, action: () => void, disabled = false) => {
+    const item = document.createElement('div');
+    item.style.padding = '4px 8px';
+    item.style.cursor = disabled ? 'default' : 'pointer';
+    item.style.display = 'flex';
+    item.style.alignItems = 'center';
+    item.style.gap = '8px';
+    item.style.opacity = disabled ? '0.5' : '1';
+    item.innerHTML = `<span>${icon}</span><span>${escapeHtml(label)}</span>`;
+    if (!disabled) {
+      item.addEventListener('mouseenter', () => {
+        item.style.background = '#004080';
+        item.style.color = '#ffffff';
+      });
+      item.addEventListener('mouseleave', () => {
+        item.style.background = 'transparent';
+        item.style.color = 'inherit';
+      });
+      item.addEventListener('click', () => {
+        menu.remove();
+        action();
+      });
+    }
+    menu.appendChild(item);
+  };
+
+  const addDivider = () => {
+    const div = document.createElement('div');
+    div.style.borderTop = '1px solid var(--win-shadow, #808080)';
+    div.style.borderBottom = '1px solid var(--win-light, #ffffff)';
+    div.style.margin = '2px 0';
+    menu.appendChild(div);
+  };
+
+  addItem(`Play ${game.title}`, '▶', () => void launchGameDirect(game));
+  addItem('Open in DOS File Manager (NC)', '📁', () => void launchFileManagerDirect(game));
+  if (selectedGameSetupCandidate) {
+    addItem(`Run Setup (${selectedGameSetupCandidate.executable})`, '⚙️', () => {
+      if (selectedGameSetupCandidate) void launchSetupDirect(game, selectedGameSetupCandidate);
+    });
+  }
+  if (selectedGameArchives.length > 0) {
+    addItem(`Unpack Archive (${selectedGameArchives[0].fileName})`, '📦', () => {
+      if (selectedGameArchives[0]) void unpackArchiveDirect(game, selectedGameArchives[0].filePath);
+    });
+  }
+  addDivider();
+  if (game.drives.cDrivePath) {
+    addItem('Reveal Folder in Finder', '🗂️', async () => {
+      if (EmulatorLauncher.isTauriEnvironment()) {
+        try {
+          const { invoke } = await import('@tauri-apps/api/core');
+          await invoke('open_folder_in_finder', { folderPath: game.drives.cDrivePath });
+        } catch (e) {
+          console.warn('Failed to open folder:', e);
+        }
+      }
+    });
+  }
+  addItem(game.favorite ? 'Remove from Favorites' : 'Add to Favorites', '★', () => {
+    game.favorite = !game.favorite;
+    StorageService.saveGames(games);
+    renderGameList();
+    renderSelectedGame();
+  });
+  addItem('Remove Game', '🗑️', () => {
+    if (confirm(`Delete "${game.title}" from library?`)) {
+      soundFX.playButtonClick();
+      games = games.filter(g => g.id !== game.id);
+      selectedGameId = games.length > 0 ? games[0].id : null;
+      StorageService.saveGames(games);
+      renderGameList();
+      renderSelectedGame();
+    }
+  });
+
+  document.body.appendChild(menu);
+
+  const closeMenu = (e: MouseEvent) => {
+    if (!menu.contains(e.target as Node)) {
+      menu.remove();
+      document.removeEventListener('click', closeMenu);
+      document.removeEventListener('contextmenu', closeMenu);
+    }
+  };
+  setTimeout(() => {
+    document.addEventListener('click', closeMenu);
+    document.addEventListener('contextmenu', closeMenu);
+  }, 10);
 }
 
 function saveActiveGameSettings() {
@@ -1244,16 +1744,26 @@ function setupEvents() {
     el.btnBigCatalog.addEventListener('click', openArchiveModal);
   }
 
-  // A selected game launches directly; command details are shown only on failure.
+  // A selected game launches directly; if it is an unextracted package/archive, triggers unpack.
   el.btnRunDosGame.addEventListener('click', () => {
     const game = getSelectedGame();
-    if (game) void launchGameDirect(game);
+    if (!game) return;
+    if (
+      selectedGameArchives.length > 0 &&
+      (game.installationState === 'needs-attention' ||
+        game.executable.toLowerCase().endsWith('.zip') ||
+        game.executable.toLowerCase().includes('package'))
+    ) {
+      void unpackArchiveDirect(game, selectedGameArchives[0].filePath);
+    } else {
+      void launchGameDirect(game);
+    }
   });
 
   // Theme Toggle Button
   el.tbThemeToggle.addEventListener('click', () => {
     soundFX.playButtonClick();
-    const themes: AppPreferences['theme'][] = ['classic-win95', 'norton-blue', 'dos-matrix'];
+    const themes: AppPreferences['theme'][] = ['classic-win95', 'norton-blue', 'dos-matrix', 'apple-light'];
     const currentIdx = themes.indexOf(prefs.theme || 'classic-win95');
     const nextTheme = themes[(currentIdx + 1) % themes.length];
     prefs.theme = nextTheme;
@@ -1404,10 +1914,7 @@ function setupEvents() {
     }
   });
 
-  el.tbConfig.addEventListener('click', () => {
-    soundFX.playButtonClick();
-    el.modalConfig.classList.add('open');
-  });
+  el.tbConfig.addEventListener('click', openConfigModal);
 
   el.tbHelp.addEventListener('click', showAppHelp);
 
@@ -1423,7 +1930,7 @@ function setupEvents() {
   el.menuEdit.addEventListener('click', openAddGameModal);
   el.menuDrives.addEventListener('click', openMediaManager);
   el.menuView.addEventListener('click', () => toggleAppFullscreen());
-  el.menuSettings.addEventListener('click', () => el.modalConfig.classList.add('open'));
+  el.menuSettings.addEventListener('click', openConfigModal);
   el.menuHelp.addEventListener('click', showAppHelp);
 
   // First-run setup and system diagnostics
@@ -1601,11 +2108,55 @@ function setupEvents() {
     el.modalGameEdit.classList.remove('open');
   });
 
+  function openConfigModal() {
+    soundFX.playButtonClick();
+    el.cfgEmuType.value = prefs.activeEmulator;
+    el.cfgDosboxPath.value = prefs.dosboxPath;
+    el.cfgStagingPath.value = prefs.dosboxStagingPath;
+    el.cfgXPath.value = prefs.dosboxXPath;
+    el.cfgDefaultDir.value = prefs.defaultCDrive;
+    el.cfgThemeSelect.value = prefs.theme;
+    el.cfgAudioEnabled.checked = prefs.soundEffectsEnabled;
+    el.cfgCheckUpdates.checked = prefs.checkForUpdates;
+    el.cfgNortonCommanderPath.value = prefs.customNortonCommanderPath || '';
+    el.cfgDeleteArchiveAfterUnpack.checked = prefs.deleteArchiveAfterUnpack === true;
+    el.modalConfig.classList.add('open');
+  }
+
+  // Secondary launch actions
+  el.btnLaunchFileManager.addEventListener('click', () => {
+    const game = getSelectedGame();
+    if (game) void launchFileManagerDirect(game);
+  });
+
+  el.btnLaunchSetup.addEventListener('click', () => {
+    const game = getSelectedGame();
+    if (game && selectedGameSetupCandidate) {
+      void launchSetupDirect(game, selectedGameSetupCandidate);
+    }
+  });
+
+  el.btnUnpackGameArchive.addEventListener('click', () => {
+    const game = getSelectedGame();
+    if (game && selectedGameArchives.length > 0) {
+      void unpackArchiveDirect(game, selectedGameArchives[0].filePath);
+    }
+  });
+
   // Modal Config
   el.btnCancelConfigX.addEventListener('click', () => el.modalConfig.classList.remove('open'));
   el.btnCloseConfig.addEventListener('click', () => el.modalConfig.classList.remove('open'));
   el.btnAutoDetectEmus.addEventListener('click', runAutoDetectEmulators);
   el.btnCheckUpdates.addEventListener('click', () => void checkForUpdates(true));
+
+  el.btnBrowseNortonCommander.addEventListener('click', async () => {
+    soundFX.playButtonClick();
+    const p = await EmulatorLauncher.browseForFile({
+      title: 'Select Norton Commander, Volkov Commander, or DOS Utility Folder',
+      extensions: ['exe', 'com', 'bat', '']
+    });
+    if (p) el.cfgNortonCommanderPath.value = p;
+  });
 
   el.btnBrowseDosbox.addEventListener('click', async () => {
     soundFX.playButtonClick();
@@ -1641,10 +2192,30 @@ function setupEvents() {
     prefs.theme = el.cfgThemeSelect.value as any;
     prefs.soundEffectsEnabled = el.cfgAudioEnabled.checked;
     prefs.checkForUpdates = el.cfgCheckUpdates.checked;
+    prefs.customNortonCommanderPath = el.cfgNortonCommanderPath.value.trim();
+    prefs.deleteArchiveAfterUnpack = el.cfgDeleteArchiveAfterUnpack.checked;
     StorageService.savePreferences(prefs);
     applyPreferences();
     renderSelectedGame();
     el.modalConfig.classList.remove('open');
+  });
+
+  // Post-Install modal
+  el.btnCancelPostInstallX.addEventListener('click', () => el.modalPostInstall.classList.remove('open'));
+  el.btnSkipPostInstall.addEventListener('click', () => el.modalPostInstall.classList.remove('open'));
+  el.btnApplyPostInstallExe.addEventListener('click', () => {
+    if (postInstallTargetGame && postInstallSelectedCandidate) {
+      soundFX.playButtonClick();
+      postInstallTargetGame.executable = postInstallSelectedCandidate.executable;
+      if (postInstallSelectedCandidate.workingDir !== undefined) {
+        postInstallTargetGame.workingDir = postInstallSelectedCandidate.workingDir;
+      }
+      postInstallTargetGame.installationState = 'ready';
+      StorageService.saveGames(games);
+      renderGameList();
+      renderSelectedGame();
+    }
+    el.modalPostInstall.classList.remove('open');
   });
 
   // Modal Launch
@@ -1704,6 +2275,7 @@ function setupEvents() {
   // Modal Saves & Checkpoints
   el.tbGameSaves.addEventListener('click', openSavesModal);
   el.btnOpenGameSaves.addEventListener('click', openSavesModal);
+  el.btnSetArtwork.addEventListener('click', handleSetArtwork);
   el.btnCancelSavesX.addEventListener('click', () => el.modalSaves.classList.remove('open'));
   el.btnCloseSaves.addEventListener('click', () => el.modalSaves.classList.remove('open'));
   el.tabLiveSaves.addEventListener('click', () => switchSavesTab('live'));

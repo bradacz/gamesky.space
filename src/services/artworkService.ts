@@ -68,6 +68,15 @@ export class ArtworkService {
       return null;
     }
   }
+  /** Copies a local image into the artwork cache and returns its asset URL. */
+  public static async importLocalFile(gameId: string, sourcePath: string): Promise<string | null> {
+    if (typeof window === 'undefined'
+      || !('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) return null;
+    const { invoke, convertFileSrc } = await import('@tauri-apps/api/core');
+    const localPath = await invoke<string>('import_artwork_file', { gameId, sourcePath });
+    return convertFileSrc(localPath);
+  }
+
   public static candidates(item: ArtworkLookup): string[] {
     const year = item.year ? String(item.year).match(/\d{4}/)?.[0] : undefined;
     const libretroCandidates = titleVariants(item.title).flatMap(title => [

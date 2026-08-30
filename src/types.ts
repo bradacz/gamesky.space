@@ -152,3 +152,24 @@ export interface GamePreset {
   coverQuery: string;
   description: string;
 }
+
+export interface DiscoveredArchiveItem {
+  fileName: string;
+  filePath: string;
+  relativePath: string;
+  format: 'zip' | 'sfx_exe' | '7z' | 'rar' | 'arj' | 'lha' | 'inno' | string;
+  sizeBytes: number;
+}
+
+export interface UnpackArchiveResult {
+  success: boolean;
+  message: string;
+  extractedFilesCount: number;
+  discoveredExecutable?: string;
+  discoveredWorkingDir?: string;
+  discoveredCdRomPath?: string;
+  /** Real game name from bundled store metadata (e.g. GOG), when available. */
+  discoveredTitle?: string;
+  installerCandidates: import('./services/emulatorLauncher').ExecutableCandidate[];
+}
+
