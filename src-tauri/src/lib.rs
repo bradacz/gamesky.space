@@ -1483,19 +1483,21 @@ fn merge_directory_into(source: &Path, destination: &Path) -> std::io::Result<()
         let entry = entry?;
         let from = entry.path();
         let to = destination.join(entry.file_name());
-        if from.is_dir() {
-            if to.is_file() {
-                fs::remove_file(&to)?;
-            }
+
+        // symlink_metadata describes the link itself. Following it here would
+        // recurse into the target and move its contents out — that guts bundles
+        // built from symlinked directories, as macOS frameworks are.
+        let is_real_dir = fs::symlink_metadata(&from)?.file_type().is_dir();
+
+        if is_real_dir {
+            // Clears a file or symlink sitting where the directory must go.
+            remove_existing_target(&to)?;
             merge_directory_into(&from, &to)?;
             let _ = fs::remove_dir(&from);
         } else {
-            if to.is_dir() {
-                fs::remove_dir_all(&to)?;
-            } else if to.exists() {
-                fs::remove_file(&to)?;
-            }
-            // rename fails across devices; fall back to copy.
+            remove_existing_target(&to)?;
+            // rename moves a symlink as the link itself, which is what we want.
+            // It fails across devices, so fall back to copying.
             if fs::rename(&from, &to).is_err() {
                 fs::copy(&from, &to)?;
                 let _ = fs::remove_file(&from);
@@ -1503,6 +1505,21 @@ fn merge_directory_into(source: &Path, destination: &Path) -> std::io::Result<()
         }
     }
     Ok(())
+}
+
+/// Clears whatever sits at `path` so an incoming entry can take its place.
+/// Returns whether anything was removed. A directory is kept when the incoming
+/// entry is also a directory, so the two can be merged instead of replaced.
+fn remove_existing_target(path: &Path) -> std::io::Result<bool> {
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return Ok(false);
+    };
+    if metadata.file_type().is_dir() {
+        return Ok(false);
+    }
+    // A symlink is removed as the link, never followed.
+    fs::remove_file(path)?;
+    Ok(true)
 }
 
 /// Folds GOG's `app` payload into the game directory and removes the Windows
@@ -1741,9 +1758,15 @@ fn extract_macos_pkg(archive: &Path, destination: &Path) -> Result<(), String> {
     find_game_dir(&unpacked, &mut game_root, 0);
     let source_root = game_root.unwrap_or(unpacked);
 
-    let merged = merge_directory_into(&source_root, destination);
+    // Keep the staging tree if the merge fails, so a partial move does not
+    // destroy the payload the user would otherwise have to re-extract.
+    merge_directory_into(&source_root, destination).map_err(|e| {
+        format!(
+            "Failed to move the unpacked game into place: {e}. The unpacked files were kept at '{}'.",
+            staging.display()
+        )
+    })?;
     let _ = fs::remove_dir_all(&staging);
-    merged.map_err(|e| format!("Failed to move the unpacked game into place: {e}"))?;
     Ok(())
 }
 
@@ -2775,7 +2798,7 @@ fn prepare_game_launch(
             discover_cd_media(&canonical_root).unwrap_or_default()
         };
 
-        harmonize_game_cd_config(&canonical_launch_dir, !prepared_cd_rom.is_empty());
+        harmonize_game_cd_config(&canonical_launch_dir, is_real_cd_media(&prepared_cd_rom, &canonical_root));
 
         return Ok(PreparedGameLaunch {
             c_drive_path: effective_root.to_string_lossy().to_string(),
@@ -2822,7 +2845,7 @@ fn prepare_game_launch(
         discover_cd_media(&canonical_root).unwrap_or_default()
     };
 
-    harmonize_game_cd_config(&canonical_launch_dir, !prepared_cd_rom.is_empty());
+    harmonize_game_cd_config(&canonical_launch_dir, is_real_cd_media(&prepared_cd_rom, &canonical_root));
 
     Ok(PreparedGameLaunch {
         c_drive_path: canonical_launch_dir.to_string_lossy().to_string(),
@@ -2898,6 +2921,16 @@ fn is_placeholder_cd_dir(dir: &Path) -> bool {
 /// exactly rather than by prefix (`CDROM_SPEED` is not a CD path), and keeps a
 /// one-time `.gamesky-backup` of the original so the shipped value can be
 /// recovered.
+/// Whether `prepared_cd_rom` names real CD media rather than discover_cd_media's
+/// last-resort fallback, which simply hands back the game directory itself.
+fn is_real_cd_media(prepared_cd_rom: &str, game_root: &Path) -> bool {
+    let trimmed = prepared_cd_rom.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    Path::new(trimmed) != game_root
+}
+
 fn harmonize_game_cd_config(launch_dir: &Path, cd_is_mounted: bool) {
     if !cd_is_mounted {
         return;
@@ -3417,21 +3450,36 @@ fn detect_scummvm_game(
     // is there do we recurse, so picking a game's own folder never pays for a
     // full-tree scan.
     let direct = run_scummvm_detect(&binary, &dir, false)?;
-    if direct.len() == 1 {
-        return Ok(direct.into_iter().next());
-    }
-    if direct.len() > 1 {
-        return Ok(None);
+    if !direct.is_empty() {
+        return Ok(single_game(direct));
     }
 
     // A GOG release unpacks to a wrapper holding the data one level down, so
     // recurse to find it. If several games turn up the folder is a library
     // rather than one game, and guessing which to attach would be wrong.
     let nested = run_scummvm_detect(&binary, &dir, true)?;
-    if nested.len() == 1 {
-        return Ok(nested.into_iter().next());
+    Ok(single_game(nested))
+}
+
+/// Collapses a detection result to one game.
+///
+/// ScummVM can list several rows for the same title in the same folder (release
+/// or language variants); those describe one installation. Rows differing in
+/// either the game or the folder mean there is a real choice to make — several
+/// games, or the same game installed more than once — and picking one would be
+/// guessing, so nothing is attached.
+fn single_game(rows: Vec<ScummvmGame>) -> Option<ScummvmGame> {
+    let mut identities: Vec<(&str, &str)> = rows
+        .iter()
+        .map(|row| (row.game_id.as_str(), row.path.as_str()))
+        .collect();
+    identities.sort_unstable();
+    identities.dedup();
+    if identities.len() == 1 {
+        rows.into_iter().next()
+    } else {
+        None
     }
-    Ok(None)
 }
 
 /// Runs ScummVM's detector and parses its `ID  Description  Full Path` table.
@@ -4424,5 +4472,121 @@ mod tests {
             detect_scummvm_game(bin, dir).unwrap().is_none(),
             "an ambiguous folder must not silently attach one of the games"
         );
+    }
+
+    #[test]
+    fn merge_preserves_symlinked_bundle_layout() {
+        use std::os::unix::fs::symlink;
+
+        let base = std::env::temp_dir().join("gamesky_merge_symlink_test");
+        let _ = fs::remove_dir_all(&base);
+        let src = base.join("src");
+        let dst = base.join("dst");
+
+        // The shape a macOS framework uses: real files under Versions/A,
+        // exposed at the top level through directory symlinks.
+        let real = src.join("F.framework").join("Versions").join("A").join("Resources");
+        fs::create_dir_all(&real).unwrap();
+        fs::write(real.join("a.txt"), b"a").unwrap();
+        fs::write(real.join("b.txt"), b"b").unwrap();
+        symlink(
+            "Versions/A/Resources",
+            src.join("F.framework").join("Resources"),
+        )
+        .unwrap();
+
+        merge_directory_into(&src, &dst).unwrap();
+
+        let moved = dst.join("F.framework");
+        let link = moved.join("Resources");
+        assert!(
+            fs::symlink_metadata(&link).unwrap().file_type().is_symlink(),
+            "the directory symlink must survive as a symlink"
+        );
+        // Following the link must still reach the real files: the target keeps
+        // its contents instead of being emptied into the link's place.
+        let target = moved.join("Versions").join("A").join("Resources");
+        assert!(target.join("a.txt").is_file());
+        assert!(target.join("b.txt").is_file());
+        assert_eq!(fs::read_dir(&target).unwrap().count(), 2);
+        assert_eq!(fs::read(link.join("a.txt")).unwrap(), b"a");
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn cd_rewrite_guard_ignores_the_discovery_fallback() {
+        let root = PathBuf::from("/games/Albion");
+        // discover_cd_media falls back to the game directory itself when it
+        // finds no media; that must not count as a mounted CD.
+        assert!(!is_real_cd_media("/games/Albion", &root));
+        assert!(!is_real_cd_media("", &root));
+        assert!(!is_real_cd_media("   ", &root));
+        // Real media, whether an image or a separate folder, does count.
+        assert!(is_real_cd_media("/games/Albion/CD/disc.iso", &root));
+        assert!(is_real_cd_media("/games/Albion/C/ALBIONCD", &root));
+    }
+
+    #[test]
+    fn variants_of_one_game_are_not_treated_as_ambiguous() {
+        let row = |id: &str, path: &str| ScummvmGame {
+            game_id: id.to_string(),
+            description: format!("{id} at {path}"),
+            path: path.to_string(),
+        };
+
+        assert!(single_game(Vec::new()).is_none());
+        assert_eq!(single_game(vec![row("sky", "/a")]).unwrap().game_id, "sky");
+
+        // Same title, same folder (language or release variants) is one game.
+        let variants = single_game(vec![row("sky", "/a"), row("sky", "/a")]);
+        assert_eq!(variants.unwrap().game_id, "sky");
+
+        // Different titles mean a library folder; picking one would be a guess.
+        assert!(single_game(vec![row("sky", "/a"), row("monkey", "/b")]).is_none());
+
+        // The same game installed twice is also a choice we must not make for
+        // the user: the folders differ, and row order is not deterministic.
+        assert!(single_game(vec![row("sky", "/a"), row("sky", "/b")]).is_none());
+    }
+
+    #[test]
+    #[ignore = "set GAMESKY_TEST_PKG to a GOG macOS .pkg"]
+    fn real_package_keeps_its_framework_bundle_intact() {
+        let Ok(pkg) = std::env::var("GAMESKY_TEST_PKG") else {
+            return;
+        };
+        if !PathBuf::from(&pkg).is_file() {
+            return;
+        }
+        let dest = std::env::temp_dir().join("gamesky_bundle_integrity");
+        let _ = fs::remove_dir_all(&dest);
+        unpack_game_archive(pkg, dest.to_string_lossy().to_string(), false, false).unwrap();
+
+        let framework = dest
+            .join("scummvm/Contents/Frameworks/Sparkle.framework");
+        if !framework.is_dir() {
+            return;
+        }
+        // The top-level entries are symlinks into Versions/A in a well-formed
+        // framework; a previous merge turned them into real directories and
+        // emptied the target.
+        for name in ["Resources", "PrivateHeaders", "Headers"] {
+            let entry = framework.join(name);
+            if !entry.exists() {
+                continue;
+            }
+            assert!(
+                fs::symlink_metadata(&entry).unwrap().file_type().is_symlink(),
+                "{name} should still be a symlink, not a real directory"
+            );
+        }
+        let resources = framework.join("Versions").join("A").join("Resources");
+        assert!(
+            fs::read_dir(&resources).unwrap().count() > 10,
+            "the symlink target keeps its contents"
+        );
+
+        let _ = fs::remove_dir_all(&dest);
     }
 }
