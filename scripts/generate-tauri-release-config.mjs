@@ -7,7 +7,9 @@ if (!outputPath || !publicKey) {
 }
 
 const cdnBase = (process.env.BUNNY_CDN_BASE_URL || 'https://cdn.gamesky.space').replace(/\/+$/, '');
-const endpoint = `${cdnBase}/releases/latest.json`;
+// Must match where deploy-bunny.mjs actually uploads: /<storagePath>/releases/.
+const storagePath = (process.env.BUNNY_STORAGE_PATH || 'gamesky.space').replace(/^\/+|\/+$/g, '');
+const endpoint = `${cdnBase}${storagePath ? `/${storagePath}` : ''}/releases/latest.json`;
 const signingIdentity = process.env.APPLE_SIGNING_IDENTITY?.trim();
 
 const config = {

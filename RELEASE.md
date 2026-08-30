@@ -51,12 +51,21 @@ BUNNY_API_KEY="" # Volitelný Account API klíč pro automatický Purge Cache
 ## 🚀 2. Krok za Krokem: Jak vydat Novou Verzi
 
 ### Krok 1: Zvýšení čísla verze (SemVer)
-Otevřete `src-tauri/tauri.conf.json` a `package.json` a zvyšte číslo verze (např. z `1.0.0` na `1.0.1`):
+Verze je na **třech** místech a musí se shodovat — `package.json`,
+`src-tauri/tauri.conf.json` a `src-tauri/Cargo.toml`:
+
 ```json
 {
-  "version": "1.0.1"
+  "version": "1.1.0"
 }
 ```
+
+```toml
+version = "1.1.0"
+```
+
+Manifest `latest.json` přebírá verzi z `tauri.conf.json`. Updater porovnává
+právě ji, takže vydání bez zvýšení verze nikomu nenabídne aktualizaci.
 
 ### Krok 2: Spuštění celého release procesu jedním příkazem
 V kořenovém adresáři projektu spusťte:
@@ -85,7 +94,7 @@ Pokud chcete provést jednotlivé kroky odděleně:
 
 | Příkaz | Popis |
 | :--- | :--- |
-| `npm run release:keys` | Vygeneruje nový pár Minisign klíčů do `.tauri-keys/` (provádí se pouze jednou). |
+| `npm run release:keys` | Vygeneruje nový pár Minisign klíčů do `.tauri-keys/`. Po rotaci je nutné zkopírovat nový veřejný klíč do `.env.release` — build jinak selže s hláškou o neshodě klíčů. |
 | `npm run release:macos` | Pouze sestaví, podepíše, znotarizuje a ověří DMG balíček lokálně. |
 | `npm run release:verify` | Ověří Gatekeeper validitu a notarizaci existujícího `.app` a `.dmg`. |
 | `npm run release:bunny` | Pouze nahraje existující sestavené balíčky na Bunny.net CDN a aktualizuje `latest.json`. |
@@ -107,3 +116,4 @@ Pokud chcete provést jednotlivé kroky odděleně:
 ## 🔒 5. Bezpečnostní zásady
 1. **Nikdy necommitujte `.env.release` ani složku `.tauri-keys/` do Gitu** (jsou automaticky chráněny v `.gitignore`).
 2. Privátní klíč `.tauri-keys/updater.key` si zálohujte na bezpečné místo (např. do správce hesel). Pokud jej ztratíte, nebude možné vydávat automatické aktualizace pro stávající uživatele bez změny veřejného klíče.
+3. Pokud se klíč někdy dostane do Gitu, **smazání souboru nestačí** — v historii zůstane a jde vytáhnout. Jedinou spolehlivou nápravou je rotace páru (`npm run release:keys`) a přepsání `GAMESKY_UPDATER_PUBKEY` v `.env.release`; tím se starý klíč stane bezcenným. Rotace je zdarma jen do prvního vydání: potom mají existující instalace starý veřejný klíč zabudovaný a výměna jim aktualizace rozbije.

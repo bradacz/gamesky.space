@@ -50,6 +50,11 @@ const REGION_ENDPOINTS = {
 };
 const storageEndpoint = REGION_ENDPOINTS[storageRegion] || 'storage.bunnycdn.com';
 
+// Uploads go to /<storagePath>/releases/, so public URLs must carry that same
+// prefix. Dropping it yields links that 404 while the upload itself succeeds.
+const releasesBasePath = `${storagePath ? `/${storagePath}` : ''}/releases`;
+const publicUrl = name => `${cdnBaseUrl}${releasesBasePath}/${encodeURIComponent(name)}`;
+
 // 1. Locate release artifacts
 const tauriTargetDir = resolve(projectRoot, 'src-tauri/target/universal-apple-darwin/release/bundle');
 const dmgDir = resolve(tauriTargetDir, 'dmg');
@@ -175,7 +180,17 @@ async function run() {
       signatureContent = readFileSync(sigPath, 'utf8').trim();
     }
 
-    // 4. Generate and upload latest.json manifest for Tauri v2 updater
+    // 4. Generate and upload latest.json manifest for Tauri v2 updater.
+    // A manifest with no signature or URL is worse than none: clients fetch it,
+    // find a release they cannot verify or download, and the cache purge makes
+    // it live immediately.
+    if (!tarGzPath || !sigPath || !signatureContent) {
+      throw new Error(
+        'Updater archive or signature is missing, so latest.json would advertise a release with no download. ' +
+        `Expected a .app.tar.gz and .sig in ${macosDir}. Run "npm run release:macos" first.`
+      );
+    }
+
     const updateManifest = {
       version: appVersion,
       notes: `GameSky.space v${appVersion} release for macOS (Universal Apple Silicon & Intel).`,
@@ -183,15 +198,15 @@ async function run() {
       platforms: {
         'darwin-aarch64': {
           signature: signatureContent,
-          url: tarGzPath ? `${cdnBaseUrl}/releases/${encodeURIComponent(basename(tarGzPath))}` : '',
+          url: tarGzPath ? publicUrl(basename(tarGzPath)) : '',
         },
         'darwin-x86_64': {
           signature: signatureContent,
-          url: tarGzPath ? `${cdnBaseUrl}/releases/${encodeURIComponent(basename(tarGzPath))}` : '',
+          url: tarGzPath ? publicUrl(basename(tarGzPath)) : '',
         },
         'macos-universal': {
           signature: signatureContent,
-          url: tarGzPath ? `${cdnBaseUrl}/releases/${encodeURIComponent(basename(tarGzPath))}` : '',
+          url: tarGzPath ? publicUrl(basename(tarGzPath)) : '',
         },
       },
     };
@@ -200,15 +215,15 @@ async function run() {
     await uploadStringContent(manifestJson, 'latest.json', 'application/json');
 
     // 5. Purge Cache for latest.json and latest DMG
-    await purgeBunnyCdnUrl(`${cdnBaseUrl}/releases/latest.json`);
-    await purgeBunnyCdnUrl(`${cdnBaseUrl}/releases/GameSky.space-latest.dmg`);
+    await purgeBunnyCdnUrl(publicUrl('latest.json'));
+    await purgeBunnyCdnUrl(publicUrl('GameSky.space-latest.dmg'));
 
     console.log('\n🎉 ========================================================');
     console.log('✅ RELEASE DEPLOYMENT COMPLETE!');
     console.log('🎉 ========================================================');
-    console.log(`📥 Download URL (Versioned):  ${cdnBaseUrl}/releases/${encodeURIComponent(basename(dmgPath))}`);
-    console.log(`📥 Download URL (Latest):     ${cdnBaseUrl}/releases/GameSky.space-latest.dmg`);
-    console.log(`🔄 Auto-Updater Endpoint:    ${cdnBaseUrl}/releases/latest.json`);
+    console.log(`📥 Download URL (Versioned):  ${publicUrl(basename(dmgPath))}`);
+    console.log(`📥 Download URL (Latest):     ${publicUrl('GameSky.space-latest.dmg')}`);
+    console.log(`🔄 Auto-Updater Endpoint:    ${publicUrl('latest.json')}`);
     console.log('===========================================================\n');
   } catch (err) {
     console.error(`\n❌ Deployment Failed: ${err.message}`);

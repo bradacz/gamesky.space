@@ -26,6 +26,20 @@ if [[ -z ${GAMESKY_UPDATER_PUBKEY:-} && -f "$project_dir/.tauri-keys/updater.key
   export GAMESKY_UPDATER_PUBKEY="$(cat "$project_dir/.tauri-keys/updater.key.pub" | tr -d '\r\n')"
 fi
 
+# The public key is baked into the app and the private key signs the update, so
+# they must be a pair. .env.release is loaded first and wins, which means a
+# rotated key leaves a stale public key behind — the build would then ship
+# updates every client rejects, with nothing failing until users stop updating.
+if [[ -n ${GAMESKY_UPDATER_PUBKEY:-} && -f "$project_dir/.tauri-keys/updater.key.pub" ]]; then
+  keyfile_pubkey="$(tr -d '\r\n' < "$project_dir/.tauri-keys/updater.key.pub")"
+  if [[ "$GAMESKY_UPDATER_PUBKEY" != "$keyfile_pubkey" ]]; then
+    fail "GAMESKY_UPDATER_PUBKEY does not match .tauri-keys/updater.key.pub.
+  The build would embed one key while signing with another, and every update
+  would be rejected as unsigned. If the keypair was rotated, copy the current
+  public key into .env.release (run: npm run release:keys to print it)."
+  fi
+fi
+
 rustup target list --installed | grep -qx 'aarch64-apple-darwin' || fail 'Apple Silicon Rust target is missing (run: rustup target add aarch64-apple-darwin).'
 rustup target list --installed | grep -qx 'x86_64-apple-darwin' || fail 'Intel Rust target is missing (run: rustup target add x86_64-apple-darwin).'
 security find-identity -v -p codesigning | grep -q 'Developer ID Application' || fail 'No valid Developer ID Application identity is available in Keychain.'

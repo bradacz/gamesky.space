@@ -16,8 +16,12 @@ architectures=$(lipo -archs "$binary_path")
 codesign --verify --deep --strict --verbose=2 "$app_path"
 spctl --assess --type execute --verbose=2 "$app_path"
 xcrun stapler validate "$app_path"
+# The DMG is what users download, so its notarization ticket is not optional.
+# Stapling is allowed to fail (the ticket may already be attached); validation
+# is not — swallowing it lets an un-notarized DMG be reported as verified.
 xcrun stapler staple "$dmg_path" 2>/dev/null || true
-xcrun stapler validate "$dmg_path" 2>/dev/null || true
+xcrun stapler validate "$dmg_path" \
+  || { print -u2 "DMG is not notarized (no stapled ticket): $dmg_path"; exit 1; }
 
 print "Verified Universal architectures: $architectures"
 print 'Verified Developer ID signature, Gatekeeper assessment and notarization tickets.'
