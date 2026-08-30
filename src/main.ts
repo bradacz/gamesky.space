@@ -136,11 +136,15 @@ const el = {
   btnBrowseDosbox: document.getElementById('btnBrowseDosbox') as HTMLButtonElement,
   btnBrowseStaging: document.getElementById('btnBrowseStaging') as HTMLButtonElement,
   btnBrowseX: document.getElementById('btnBrowseX') as HTMLButtonElement,
+  btnBrowseScummvm: document.getElementById('btnBrowseScummvm') as HTMLButtonElement,
   btnBrowseDefaultDir: document.getElementById('btnBrowseDefaultDir') as HTMLButtonElement,
   cfgEmuType: document.getElementById('cfgEmuType') as HTMLSelectElement,
   cfgDosboxPath: document.getElementById('cfgDosboxPath') as HTMLInputElement,
   cfgStagingPath: document.getElementById('cfgStagingPath') as HTMLInputElement,
   cfgXPath: document.getElementById('cfgXPath') as HTMLInputElement,
+  cfgScummvmPath: document.getElementById('cfgScummvmPath') as HTMLInputElement,
+  panelDrives: document.getElementById('panelDrives') as HTMLDivElement,
+  panelDosboxConfig: document.getElementById('panelDosboxConfig') as HTMLDivElement,
   cfgDefaultDir: document.getElementById('cfgDefaultDir') as HTMLInputElement,
   cfgThemeSelect: document.getElementById('cfgThemeSelect') as HTMLSelectElement,
   cfgNortonCommanderPath: document.getElementById('cfgNortonCommanderPath') as HTMLInputElement,
@@ -517,6 +521,7 @@ function applyPreferences() {
   el.cfgDosboxPath.value = prefs.dosboxPath;
   el.cfgStagingPath.value = prefs.dosboxStagingPath;
   el.cfgXPath.value = prefs.dosboxXPath;
+  el.cfgScummvmPath.value = prefs.scummvmPath;
   el.cfgDefaultDir.value = prefs.defaultCDrive;
   el.cfgThemeSelect.value = prefs.theme || 'classic-win95';
   el.cfgAudioEnabled.checked = prefs.soundEffectsEnabled;
@@ -721,6 +726,18 @@ function renderGameList() {
 // --------------------------------------------------------------------------
 // RENDER SELECTED GAME
 // --------------------------------------------------------------------------
+/** DOSBox drives, CPU, scaler and sound cards mean nothing to ScummVM, which
+ *  manages its own engine settings, so those panels are hidden for its games. */
+function applyEngineSpecificUi(game: GameProfile) {
+  const isScummvm = (game.settings.emulatorType || prefs.activeEmulator) === 'scummvm';
+  el.panelDrives.style.display = isScummvm ? 'none' : '';
+  el.panelDosboxConfig.style.display = isScummvm ? 'none' : '';
+  el.btnLaunchFileManager.style.display = isScummvm ? 'none' : '';
+  if (isScummvm) {
+    el.btnLaunchSetup.style.display = 'none';
+  }
+}
+
 function renderSelectedGame() {
   const game = getSelectedGame();
   if (!game) {
@@ -744,9 +761,14 @@ function renderSelectedGame() {
     el.btnLaunchFileManager.disabled = true;
     el.btnLaunchSetup.style.display = 'none';
     el.btnUnpackGameArchive.style.display = 'none';
+    el.panelDrives.style.display = '';
+    el.panelDosboxConfig.style.display = '';
+    el.btnLaunchFileManager.style.display = '';
     if (el.lblRunDosGame) el.lblRunDosGame.textContent = 'RUN GAME';
     return;
   }
+
+  applyEngineSpecificUi(game);
 
   // Center Showcase
   el.centerCoverPlaceholder.textContent = game.title
@@ -1111,13 +1133,35 @@ async function unpackArchiveDirect(game: GameProfile, archivePath: string) {
       if (res.discoveredTitle && res.discoveredTitle.trim() !== '') {
         game.title = res.discoveredTitle.trim();
       }
+
+      // No DOS executable can still mean a playable game: GOG's Mac releases of
+      // adventure titles ship ScummVM data. Ask ScummVM before giving up.
+      let scummvmNote = '';
+      if (!res.discoveredExecutable) {
+        const detected = await EmulatorLauncher.detectScummvmGame(
+          prefs.scummvmPath,
+          destinationFolder
+        ).catch(() => null);
+        if (detected) {
+          game.settings.emulatorType = 'scummvm';
+          game.scummvmGameId = detected.gameId;
+          game.executable = '';
+          game.workingDir = '';
+          game.drives.cdRomPath = '';
+          game.compatibilityReason = `ScummVM game '${detected.gameId}'`;
+          scummvmNote = `\n\n🎮 Recognised by ScummVM as:\n${detected.description}`;
+        }
+      }
+
       game.installationState = 'ready';
       game.compatibilityConfidence = 'high';
-      game.compatibilityReason = 'Extracted package archive';
+      if (!game.compatibilityReason?.startsWith('ScummVM')) {
+        game.compatibilityReason = 'Extracted package archive';
+      }
       StorageService.saveGames(games);
       renderGameList();
       renderSelectedGame();
-      alert(`Package extracted successfully! Extracted ${res.extractedFilesCount} file(s) into:\n${destinationFolder}${res.discoveredCdRomPath ? `\n\n💿 Auto-mounted CD-ROM media:\n${res.discoveredCdRomPath}` : ''}`);
+      alert(`Package extracted successfully! Extracted ${res.extractedFilesCount} file(s) into:\n${destinationFolder}${res.discoveredCdRomPath ? `\n\n💿 Auto-mounted CD-ROM media:\n${res.discoveredCdRomPath}` : ''}${scummvmNote}`);
     } else {
       soundFX.playPcSpeakerBeep(260, 0.25);
       alert(`Failed to unpack archive:\n${res.message}`);
@@ -2114,6 +2158,7 @@ function setupEvents() {
     el.cfgDosboxPath.value = prefs.dosboxPath;
     el.cfgStagingPath.value = prefs.dosboxStagingPath;
     el.cfgXPath.value = prefs.dosboxXPath;
+    el.cfgScummvmPath.value = prefs.scummvmPath;
     el.cfgDefaultDir.value = prefs.defaultCDrive;
     el.cfgThemeSelect.value = prefs.theme;
     el.cfgAudioEnabled.checked = prefs.soundEffectsEnabled;
@@ -2176,6 +2221,12 @@ function setupEvents() {
     if (p) el.cfgXPath.value = p;
   });
 
+  el.btnBrowseScummvm.addEventListener('click', async () => {
+    soundFX.playButtonClick();
+    const p = await EmulatorLauncher.browseForEmulator('Select ScummVM App or Executable');
+    if (p) el.cfgScummvmPath.value = p;
+  });
+
   el.btnBrowseDefaultDir.addEventListener('click', async () => {
     soundFX.playButtonClick();
     const p = await EmulatorLauncher.browseForFolder('Select Default DOS Games Folder (C:\\)');
@@ -2188,6 +2239,7 @@ function setupEvents() {
     prefs.dosboxPath = el.cfgDosboxPath.value.trim();
     prefs.dosboxStagingPath = el.cfgStagingPath.value.trim();
     prefs.dosboxXPath = el.cfgXPath.value.trim();
+    prefs.scummvmPath = el.cfgScummvmPath.value.trim();
     prefs.defaultCDrive = el.cfgDefaultDir.value.trim();
     prefs.theme = el.cfgThemeSelect.value as any;
     prefs.soundEffectsEnabled = el.cfgAudioEnabled.checked;
@@ -2522,13 +2574,23 @@ async function runAutoDetectEmulators() {
         } else if (t === 'dosbox-x') {
           el.cfgXPath.value = p;
           el.cfgEmuType.value = 'dosbox-x';
+        } else if (t === 'scummvm') {
+          el.cfgScummvmPath.value = p;
         }
       });
     });
 
+    // Fill in every emulator we found. ScummVM only fills its own path — it is
+    // chosen per game, so it must not become the library-wide default.
+    for (const install of found) {
+      if (install.emulatorType === 'scummvm') el.cfgScummvmPath.value = install.path;
+    }
+
     // Auto-fill active emulator path
-    const first = found[0];
-    if (first.emulatorType === 'dosbox-staging') {
+    const first = found.find(install => install.emulatorType !== 'scummvm');
+    if (!first) {
+      // Nothing but ScummVM is installed; leave the DOSBox selection alone.
+    } else if (first.emulatorType === 'dosbox-staging') {
       el.cfgStagingPath.value = first.path;
       el.cfgEmuType.value = 'dosbox-staging';
     } else if (first.emulatorType === 'dosbox-x') {

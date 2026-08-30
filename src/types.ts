@@ -1,4 +1,4 @@
-export type EmulatorType = 'dosbox' | 'dosbox-staging' | 'dosbox-x' | 'custom';
+export type EmulatorType = 'dosbox' | 'dosbox-staging' | 'dosbox-x' | 'scummvm' | 'custom';
 
 export type MachineType = 'vga' | 'svga_s3' | 'svga_et4000' | 'svga_paradise' | 'cga' | 'ega' | 'tandy' | 'hercules' | 'pc98';
 
@@ -115,6 +115,8 @@ export interface GameProfile {
   
   // Execution
   executable: string; // e.g., "DOOM.EXE", "PLAY.BAT"
+  /** ScummVM target id (e.g. "sky"); the launch target when emulatorType is scummvm. */
+  scummvmGameId?: string;
   parameters?: string; // e.g., "-skill 4"
   workingDir?: string; // Subfolder inside C:\ if applicable (e.g., "DOOM2")
   

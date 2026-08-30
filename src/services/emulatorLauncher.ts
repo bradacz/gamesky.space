@@ -93,7 +93,14 @@ export class EmulatorLauncher {
     let binaryPath = prefs.dosboxPath;
     if (emuType === 'dosbox-staging') binaryPath = prefs.dosboxStagingPath;
     if (emuType === 'dosbox-x') binaryPath = prefs.dosboxXPath;
+    if (emuType === 'scummvm') binaryPath = prefs.scummvmPath;
     if (emuType === 'custom' && game.settings.customEmulatorPath) binaryPath = game.settings.customEmulatorPath;
+
+    // ScummVM takes a game id and folder rather than a DOSBox conf, and its
+    // games have no DOS executable to validate, so it skips prepareGame.
+    if (emuType === 'scummvm') {
+      return this.launchScummvmGame(game, binaryPath);
+    }
 
     if (this.isTauriEnvironment()) {
       try {
@@ -148,6 +155,60 @@ export class EmulatorLauncher {
       commandExecuted: cliCommand,
       confGenerated: conf
     };
+  }
+
+  private static async launchScummvmGame(game: GameProfile, binaryPath: string): Promise<LaunchResult> {
+    if (!this.isTauriEnvironment()) {
+      return {
+        success: false,
+        message: 'Native environment is required to start ScummVM.'
+      };
+    }
+    const gameDir = game.drives.cDrivePath;
+    if (!gameDir || gameDir.trim() === '') {
+      return { success: false, message: 'The game folder is not configured.' };
+    }
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      let targetId = game.scummvmGameId;
+      if (!targetId || targetId.trim() === '') {
+        const detected = await invoke<{ gameId: string; description: string } | null>(
+          'detect_scummvm_game',
+          { binaryPath, gameDir }
+        );
+        if (!detected) {
+          return {
+            success: false,
+            message: 'ScummVM did not recognise a game in this folder.'
+          };
+        }
+        targetId = detected.gameId;
+      }
+      return await invoke<LaunchResult>('launch_scummvm_command', {
+        binaryPath,
+        gameDir,
+        scummvmGameId: targetId,
+        gameTitle: game.title,
+        gameId: game.id,
+        fullscreen: game.settings.fullscreen === true
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, message: message || 'ScummVM could not be started.' };
+    }
+  }
+
+  /** Asks ScummVM to identify the game in a folder; null when it recognises none. */
+  public static async detectScummvmGame(
+    binaryPath: string,
+    gameDir: string
+  ): Promise<{ gameId: string; description: string } | null> {
+    if (!this.isTauriEnvironment()) return null;
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<{ gameId: string; description: string } | null>('detect_scummvm_game', {
+      binaryPath,
+      gameDir
+    });
   }
 
   public static async launchFileManager(game: GameProfile, prefs: AppPreferences): Promise<LaunchResult> {

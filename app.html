@@ -112,7 +112,7 @@
           <div class="right-panel" id="panelRight">
             
             <!-- PANEL: DRIVES & MEDIA -->
-            <div class="panel-group win-outset">
+            <div class="panel-group win-outset" id="panelDrives">
               <div class="panel-group-title">
                 <span>[ DRIVES &amp; MEDIA ]</span>
               </div>
@@ -140,7 +140,7 @@
             </div>
 
             <!-- PANEL: DOSBOX EMULATION SETTINGS -->
-            <div class="panel-group win-outset settings-panel">
+            <div class="panel-group win-outset settings-panel" id="panelDosboxConfig">
               <div class="panel-group-title">
                 <span>[ DOSBOX CONFIG ]</span>
               </div>
@@ -353,6 +353,7 @@
               <option value="dosbox">Standard DOSBox</option>
               <option value="dosbox-staging">DOSBox-Staging (Recommended)</option>
               <option value="dosbox-x">DOSBox-X</option>
+              <option value="scummvm">ScummVM (adventure games)</option>
             </select>
           </div>
 
@@ -383,6 +384,15 @@
               <input type="text" id="cfgXPath" class="folder-input">
               <button class="btn-3d" id="btnBrowseX">Browse...</button>
             </div>
+          </div>
+
+          <div class="field-block">
+            <span class="field-label">ScummVM Path:</span>
+            <div style="display:flex; gap:4px">
+              <input type="text" id="cfgScummvmPath" class="folder-input">
+              <button class="btn-3d" id="btnBrowseScummvm">Browse...</button>
+            </div>
+            <div style="font-size:11px; opacity:0.75; margin-top:2px;">Used for adventure games that run on ScummVM instead of DOSBox.</div>
           </div>
 
           <div class="field-block">

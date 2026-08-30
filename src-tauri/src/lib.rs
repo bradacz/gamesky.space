@@ -3199,6 +3199,236 @@ fn scan_installed_games(base_dir: String) -> Result<Vec<DiscoveredGame>, String>
     Ok(games)
 }
 
+struct SpawnRequest {
+    app: tauri::AppHandle,
+    binary: String,
+    args: Vec<String>,
+    working_dir: Option<PathBuf>,
+    game_id: Option<String>,
+    emulator_type: String,
+    success_message: String,
+    failure_prefix: String,
+    conf_content: Option<String>,
+    /// Temporary file to delete once the emulator exits.
+    cleanup_path: Option<PathBuf>,
+}
+
+/// Starts an emulator and records the play session, emitting `game-session-ended`
+/// when it exits. Shared by every emulator backend so session bookkeeping and
+/// temp-file cleanup stay in one place.
+fn spawn_tracked_emulator(request: SpawnRequest) -> LaunchResult {
+    let SpawnRequest {
+        app,
+        binary,
+        args,
+        working_dir,
+        game_id,
+        emulator_type,
+        success_message,
+        failure_prefix,
+        conf_content,
+        cleanup_path,
+    } = request;
+
+    let command_display = format!(
+        "\"{}\" {}",
+        binary,
+        args.iter()
+            .map(|a| format!("\"{a}\""))
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+
+    let mut command = Command::new(&binary);
+    command.args(&args);
+    if let Some(dir) = &working_dir {
+        command.current_dir(dir);
+    }
+
+    match command.spawn() {
+        Ok(mut child) => {
+            let session = game_id.as_ref().and_then(|id| {
+                database::database_start_play_session(app.clone(), id.clone(), emulator_type.clone())
+                    .ok()
+            });
+            let tracked_session = game_id.zip(session);
+            let app_handle = app.clone();
+            std::thread::spawn(move || {
+                let exit_status = child
+                    .wait()
+                    .map(|status| {
+                        status
+                            .code()
+                            .map(|code| code.to_string())
+                            .unwrap_or_else(|| "terminated".to_string())
+                    })
+                    .unwrap_or_else(|error| format!("wait-error:{error}"));
+                if let Some((id, session_id)) = tracked_session {
+                    let duration_seconds = database::database_finish_play_session(
+                        app_handle.clone(),
+                        session_id,
+                        exit_status.clone(),
+                    )
+                    .unwrap_or(0);
+                    let _ = app_handle.emit(
+                        "game-session-ended",
+                        GameSessionEnded {
+                            game_id: id,
+                            session_id,
+                            duration_seconds,
+                            exit_status,
+                        },
+                    );
+                }
+                if let Some(path) = cleanup_path {
+                    let _ = fs::remove_file(path);
+                }
+            });
+            LaunchResult {
+                success: true,
+                message: success_message,
+                command_executed: Some(command_display),
+                conf_generated: conf_content,
+                session_id: session,
+            }
+        }
+        Err(e) => LaunchResult {
+            success: false,
+            message: format!("{failure_prefix}: {e}"),
+            command_executed: Some(command_display),
+            conf_generated: conf_content,
+            session_id: None,
+        },
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ScummvmGame {
+    pub game_id: String,
+    pub description: String,
+}
+
+/// Resolves which ScummVM to use: the configured one when present, otherwise a
+/// copy bundled beside the game. GOG's Mac releases ship their own ScummVM, so
+/// those games play without a separate install.
+fn resolve_scummvm_binary(preferred: &str, game_dir: &Path) -> Option<PathBuf> {
+    let configured = expand_home_path(preferred.trim());
+    if !preferred.trim().is_empty() && configured.is_file() {
+        return Some(configured);
+    }
+    let relative = Path::new("scummvm")
+        .join("Contents")
+        .join("MacOS")
+        .join("scummvm");
+    let mut roots = vec![game_dir.to_path_buf()];
+    if let Some(parent) = game_dir.parent() {
+        roots.push(parent.to_path_buf());
+    }
+    for root in roots {
+        for candidate in [root.join(&relative), root.join("scummvm")] {
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
+/// Asks ScummVM to identify the game in `game_dir`. ScummVM prints a table of
+/// `ID  Description  Full Path`; the id is the launch target.
+#[tauri::command]
+fn detect_scummvm_game(
+    binary_path: String,
+    game_dir: String,
+) -> Result<Option<ScummvmGame>, String> {
+    let dir = expand_home_path(game_dir.trim());
+    if !dir.is_dir() {
+        return Err(format!("Game folder '{}' was not found.", dir.display()));
+    }
+    let binary = resolve_scummvm_binary(&binary_path, &dir).ok_or_else(|| {
+        "ScummVM was not found. Install it or set its path in Configuration.".to_string()
+    })?;
+
+    // --path must precede --detect; ScummVM ignores it otherwise.
+    let output = Command::new(&binary)
+        .arg(format!("--path={}", dir.to_string_lossy()))
+        .arg("--detect")
+        .output()
+        .map_err(|e| format!("Failed to run ScummVM: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty()
+            || trimmed.starts_with("ID ")
+            || trimmed.starts_with("--")
+            || trimmed.starts_with("WARNING")
+        {
+            continue;
+        }
+        // Columns are separated by runs of spaces; the last one is the path.
+        let mut columns = trimmed.split("  ").filter(|c| !c.trim().is_empty());
+        let Some(id) = columns.next().map(|c| c.trim().to_string()) else {
+            continue;
+        };
+        if id.is_empty() {
+            continue;
+        }
+        let description = columns
+            .next()
+            .map(|c| c.trim().to_string())
+            .unwrap_or_else(|| id.clone());
+        return Ok(Some(ScummvmGame {
+            game_id: id,
+            description,
+        }));
+    }
+    Ok(None)
+}
+
+#[tauri::command]
+fn launch_scummvm_command(
+    app: tauri::AppHandle,
+    binary_path: String,
+    game_dir: String,
+    scummvm_game_id: String,
+    game_title: String,
+    game_id: Option<String>,
+    fullscreen: Option<bool>,
+) -> Result<LaunchResult, String> {
+    let dir = expand_home_path(game_dir.trim());
+    if !dir.is_dir() {
+        return Err(format!("Game folder '{}' was not found.", dir.display()));
+    }
+    let binary = resolve_scummvm_binary(&binary_path, &dir).ok_or_else(|| {
+        "ScummVM was not found. Install it or set its path in Configuration.".to_string()
+    })?;
+    let target = scummvm_game_id.trim();
+    if target.is_empty() || !is_valid_identifier(target) {
+        return Err("The ScummVM game id is missing or invalid.".to_string());
+    }
+
+    let mut args = vec![format!("--path={}", dir.to_string_lossy())];
+    if fullscreen.unwrap_or(false) {
+        args.push("--fullscreen".to_string());
+    }
+    args.push(target.to_string());
+
+    Ok(spawn_tracked_emulator(SpawnRequest {
+        app,
+        binary: binary.to_string_lossy().to_string(),
+        args,
+        working_dir: Some(dir),
+        game_id,
+        emulator_type: "scummvm".to_string(),
+        success_message: format!("Successfully started ScummVM for '{game_title}'!"),
+        failure_prefix: "Failed to spawn ScummVM process".to_string(),
+        conf_content: None,
+        cleanup_path: None,
+    }))
+}
+
 #[tauri::command]
 fn launch_dosbox_command(
     app: tauri::AppHandle,
@@ -3270,79 +3500,29 @@ fn launch_dosbox_command(
         (installation.path.clone(), true)
     };
 
-    let command_display = format!("\"{}\" -conf \"{}\"", resolved_binary, conf_path_str);
-    let child_res = Command::new(&resolved_binary)
-        .arg("-conf")
-        .arg(&conf_path_str)
-        .spawn();
+    let success_message = if used_fallback {
+        format!(
+            "Started '{}' with the automatically detected DOSBox at '{}'.",
+            game_title, resolved_binary
+        )
+    } else {
+        format!("Successfully started DOSBox for '{}'!", game_title)
+    };
 
-    match child_res {
-        Ok(mut child) => {
-            let session = game_id.as_ref().and_then(|id| {
-                database::database_start_play_session(
-                    app.clone(),
-                    id.clone(),
-                    emulator_type
-                        .clone()
-                        .unwrap_or_else(|| "dosbox".to_string()),
-                )
-                .ok()
-            });
-            let tracked_session = game_id.zip(session);
-            let app_handle = app.clone();
-            let cleanup_conf_path = conf_path.clone();
-            std::thread::spawn(move || {
-                let exit_status = child
-                    .wait()
-                    .map(|status| {
-                        status
-                            .code()
-                            .map(|code| code.to_string())
-                            .unwrap_or_else(|| "terminated".to_string())
-                    })
-                    .unwrap_or_else(|error| format!("wait-error:{error}"));
-                if let Some((id, session_id)) = tracked_session {
-                    let duration_seconds = database::database_finish_play_session(
-                        app_handle.clone(),
-                        session_id,
-                        exit_status.clone(),
-                    )
-                    .unwrap_or(0);
-                    let _ = app_handle.emit(
-                        "game-session-ended",
-                        GameSessionEnded {
-                            game_id: id,
-                            session_id,
-                            duration_seconds,
-                            exit_status,
-                        },
-                    );
-                }
-                let _ = fs::remove_file(cleanup_conf_path);
-            });
-            Ok(LaunchResult {
-                success: true,
-                message: if used_fallback {
-                    format!(
-                        "Started '{}' with the automatically detected DOSBox at '{}'.",
-                        game_title, resolved_binary
-                    )
-                } else {
-                    format!("Successfully started DOSBox for '{}'!", game_title)
-                },
-                command_executed: Some(command_display),
-                conf_generated: Some(conf_content),
-                session_id: session,
-            })
-        }
-        Err(e) => Ok(LaunchResult {
-            success: false,
-            message: format!("Failed to spawn DOSBox process: {}", e),
-            command_executed: Some(command_display),
-            conf_generated: Some(conf_content),
-            session_id: None,
-        }),
-    }
+    Ok(spawn_tracked_emulator(
+        SpawnRequest {
+            app,
+            binary: resolved_binary,
+            args: vec!["-conf".to_string(), conf_path_str],
+            working_dir: None,
+            game_id,
+            emulator_type: emulator_type.unwrap_or_else(|| "dosbox".to_string()),
+            success_message,
+            failure_prefix: "Failed to spawn DOSBox process".to_string(),
+            conf_content: Some(conf_content),
+            cleanup_path: Some(conf_path),
+        },
+    ))
 }
 
 #[tauri::command]
@@ -3418,6 +3598,28 @@ fn detect_dosbox_installations() -> Vec<DosboxInstallation> {
             "/usr/local/bin/dosbox-x".to_string(),
             "dosbox-x",
         ),
+        (
+            "ScummVM (App)",
+            "/Applications/ScummVM.app/Contents/MacOS/scummvm".to_string(),
+            "scummvm",
+        ),
+        (
+            "ScummVM (User Apps)",
+            home.join("Applications/ScummVM.app/Contents/MacOS/scummvm")
+                .to_string_lossy()
+                .to_string(),
+            "scummvm",
+        ),
+        (
+            "ScummVM (Homebrew)",
+            "/opt/homebrew/bin/scummvm".to_string(),
+            "scummvm",
+        ),
+        (
+            "ScummVM (/usr/local/bin)",
+            "/usr/local/bin/scummvm".to_string(),
+            "scummvm",
+        ),
     ];
 
     for (name, path, emu_type) in candidates {
@@ -3488,6 +3690,8 @@ pub fn run() {
             open_folder_in_finder,
             cache_artwork,
             import_artwork_file,
+            detect_scummvm_game,
+            launch_scummvm_command,
             open_catalog_source,
             download_and_install_archive_game,
             prepare_game_launch,
@@ -3871,6 +4075,103 @@ mod tests {
             "message should explain why it will not run: {}",
             result.message
         );
+
+        let _ = fs::remove_dir_all(&dest);
+    }
+
+    #[test]
+    #[ignore = "set GAMESKY_TEST_SCUMMVM and GAMESKY_TEST_SCUMMVM_DIR"]
+    fn scummvm_game_is_detected_from_its_data_files() {
+        let (Ok(bin), Ok(dir)) = (
+            std::env::var("GAMESKY_TEST_SCUMMVM"),
+            std::env::var("GAMESKY_TEST_SCUMMVM_DIR"),
+        ) else {
+            return;
+        };
+        let found = detect_scummvm_game(bin.clone(), dir)
+            .expect("detection should run")
+            .expect("a game should be found");
+        assert_eq!(found.game_id, "sky");
+        assert!(
+            found.description.contains("Beneath a Steel Sky"),
+            "unexpected description: {}",
+            found.description
+        );
+
+        // A folder with no ScummVM game yields None rather than an error.
+        let empty = std::env::temp_dir().join("gamesky_scummvm_empty");
+        let _ = fs::remove_dir_all(&empty);
+        fs::create_dir_all(&empty).unwrap();
+        let none = detect_scummvm_game(bin, empty.to_string_lossy().to_string())
+            .expect("detection should run on an empty folder");
+        assert!(none.is_none());
+        let _ = fs::remove_dir_all(&empty);
+    }
+
+    #[test]
+    fn bundled_scummvm_is_preferred_when_none_is_installed() {
+        let root = std::env::temp_dir().join("gamesky_scummvm_resolve_test");
+        let _ = fs::remove_dir_all(&root);
+        let bundled = root.join("scummvm").join("Contents").join("MacOS");
+        fs::create_dir_all(&bundled).unwrap();
+        fs::write(bundled.join("scummvm"), b"binary").unwrap();
+        let game_dir = root.join("game");
+        fs::create_dir_all(&game_dir).unwrap();
+
+        // GOG layout: the game sits beside the bundled engine.
+        let found = resolve_scummvm_binary("/nonexistent/scummvm", &game_dir)
+            .expect("bundled ScummVM should be found next to the game");
+        assert!(found.ends_with("scummvm/Contents/MacOS/scummvm"));
+
+        // A configured, existing binary still wins.
+        let installed = root.join("installed-scummvm");
+        fs::write(&installed, b"binary").unwrap();
+        let chosen = resolve_scummvm_binary(&installed.to_string_lossy(), &game_dir).unwrap();
+        assert_eq!(chosen, installed);
+
+        // Nothing anywhere yields None rather than a bogus path.
+        let bare = std::env::temp_dir().join("gamesky_scummvm_resolve_bare");
+        let _ = fs::remove_dir_all(&bare);
+        fs::create_dir_all(&bare).unwrap();
+        assert!(resolve_scummvm_binary("", &bare).is_none());
+
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&bare);
+    }
+
+    #[test]
+    #[ignore = "set GAMESKY_TEST_PKG to a GOG macOS .pkg"]
+    fn gog_scummvm_package_configures_itself_end_to_end() {
+        let Ok(pkg) = std::env::var("GAMESKY_TEST_PKG") else {
+            return;
+        };
+        if !PathBuf::from(&pkg).is_file() {
+            return;
+        }
+        let dest = std::env::temp_dir().join("gamesky_scummvm_e2e");
+        let _ = fs::remove_dir_all(&dest);
+
+        // 1. The package unpacks and reports that DOSBox cannot run it.
+        let unpack =
+            unpack_game_archive(pkg, dest.to_string_lossy().to_string(), false, false).unwrap();
+        assert!(unpack.success);
+        assert!(unpack.discovered_executable.is_none());
+        assert!(unpack.message.contains("ScummVM"));
+
+        // 2. With no ScummVM installed, the bundled one is still found...
+        let game_dir = dest.join("game");
+        assert!(game_dir.is_dir());
+        let binary = resolve_scummvm_binary("", &game_dir)
+            .expect("the package ships its own ScummVM");
+
+        // 3. ...and it identifies the game, giving us a launch target.
+        let detected = detect_scummvm_game(
+            binary.to_string_lossy().to_string(),
+            game_dir.to_string_lossy().to_string(),
+        )
+        .unwrap()
+        .expect("ScummVM should recognise the game");
+        assert_eq!(detected.game_id, "sky");
 
         let _ = fs::remove_dir_all(&dest);
     }

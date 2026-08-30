@@ -4,7 +4,8 @@ export interface AppPreferences {
   dosboxPath: string;
   dosboxStagingPath: string;
   dosboxXPath: string;
-  activeEmulator: 'dosbox' | 'dosbox-staging' | 'dosbox-x' | 'custom';
+  scummvmPath: string;
+  activeEmulator: 'dosbox' | 'dosbox-staging' | 'dosbox-x' | 'scummvm' | 'custom';
   defaultCDrive: string;
   crtFilterEnabled: boolean;
   soundEffectsEnabled: boolean;
@@ -124,6 +125,7 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   dosboxPath: '/Applications/DOSBox.app/Contents/MacOS/DOSBox',
   dosboxStagingPath: '/Applications/DOSBox Staging.app/Contents/MacOS/dosbox',
   dosboxXPath: '/Applications/DOSBox-X.app/Contents/MacOS/dosbox-x',
+  scummvmPath: '/Applications/ScummVM.app/Contents/MacOS/scummvm',
   activeEmulator: 'dosbox',
   defaultCDrive: '~/DOSGAMES',
   crtFilterEnabled: false,
