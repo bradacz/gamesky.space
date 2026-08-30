@@ -4923,4 +4923,63 @@ mod tests {
             "reported {missing:?} while innoextract present = {innoextract_present}"
         );
     }
+
+    #[test]
+    fn gog_mac_release_of_a_dos_game_unpacks_without_extra_tools() {
+        // GOG's Mac builds wrap DOSBox rather than ScummVM. The real ScummVM
+        // package is covered elsewhere; this builds the DOSBox shape so the
+        // path is exercised without needing that download.
+        if !PathBuf::from("/usr/bin/xar").is_file() {
+            return;
+        }
+        let base = std::env::temp_dir().join("gamesky_mac_dospkg_test");
+        let _ = fs::remove_dir_all(&base);
+        let build = base.join("build");
+        let game = build.join("payload/Contents/Resources/game");
+        fs::create_dir_all(game.join("DUNE2")).unwrap();
+        fs::create_dir_all(game.join("dosbox")).unwrap();
+        fs::write(game.join("DUNE2/DUNE2.EXE"), b"MZ\x90\x00").unwrap();
+        fs::write(game.join("DUNE2/DOS4GW.EXE"), b"MZ\x90\x00").unwrap();
+        fs::write(game.join("DUNE2/PLAY.BAT"), b"@echo off\r\nDUNE2.EXE\r\n").unwrap();
+        fs::write(game.join("dosbox/dosbox"), b"binary").unwrap();
+        fs::create_dir_all(build.join("package.pkg")).unwrap();
+
+        let script = "find payload -print | cpio -o --quiet 2>/dev/null | gzip > package.pkg/Scripts";
+        assert!(Command::new("/bin/sh")
+            .arg("-c")
+            .arg(script)
+            .current_dir(&build)
+            .status()
+            .unwrap()
+            .success());
+        fs::remove_dir_all(build.join("payload")).unwrap();
+        let pkg = base.join("game.pkg");
+        assert!(Command::new("/usr/bin/xar")
+            .arg("-cf")
+            .arg(&pkg)
+            .arg("package.pkg")
+            .current_dir(&build)
+            .status()
+            .unwrap()
+            .success());
+
+        let dest = base.join("out");
+        let result = unpack_game_archive(
+            pkg.to_string_lossy().to_string(),
+            dest.to_string_lossy().to_string(),
+            false,
+            false,
+        )
+        .expect("a Mac package needs no external unpacker");
+
+        assert!(result.success);
+        // The wrapped app's Resources/game is hoisted, engine and all.
+        assert!(dest.join("DUNE2").is_dir());
+        assert!(dest.join("dosbox").is_dir());
+        // And the launcher is chosen over the DOS extender beside it.
+        assert_eq!(result.discovered_executable.as_deref(), Some("PLAY.BAT"));
+        assert_eq!(result.discovered_working_dir.as_deref(), Some("DUNE2"));
+
+        let _ = fs::remove_dir_all(&base);
+    }
 }

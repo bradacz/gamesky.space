@@ -31,9 +31,12 @@
 
 ### Optional: unpacking Windows installers
 
-ZIP archives and macOS `.pkg` releases unpack out of the box. Unpacking **Inno
-Setup installers** — the format GOG and OldGames.sk use for their Windows
-builds — needs `innoextract`, which is not bundled:
+GOG's **macOS** releases (`.pkg`) and ZIP archives unpack out of the box, with
+no extra tools — that includes both the DOSBox-wrapped and ScummVM builds.
+
+Unpacking **Inno Setup installers** — the format GOG and OldGames.sk use for
+their **Windows** builds, and the only download some games offer — needs
+`innoextract`, which is not bundled:
 
 ```bash
 brew install innoextract     # GOG / OldGames.sk installers
