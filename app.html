@@ -98,6 +98,7 @@
                 <button class="btn-3d" id="btnGameControls">⌨ CONTROLS</button>
                 <button class="btn-3d" id="btnOpenGameSaves">💾 SAVES</button>
                 <button class="btn-3d" id="btnSetArtwork" title="Choose a cover image from disk">🖼 ARTWORK</button>
+                <button class="btn-3d" id="btnChooseExecutable" title="Choose which file starts this game">🎯 LAUNCH FILE</button>
                 <button class="btn-3d" id="btnLaunchFileManager" title="Open DOSBox in Norton Commander (Drive Y:)">📁 NC (Y:)</button>
                 <button class="btn-3d" id="btnLaunchSetup" title="Run Setup / Configurator" style="display:none;">⚙️ SETUP</button>
                 <button class="btn-3d" id="btnUnpackGameArchive" title="Unpack Archive / Package" style="display:none; background:#7b4a00; color:#fff;">📦 UNPACK</button>
@@ -716,7 +717,7 @@
       <div class="modal-box win-outset" style="max-width:480px;">
         <div class="title-bar">
           <div class="title-text">
-            <span>🎉 Installation / Setup Complete</span>
+            <span id="postInstallTitle">🎉 Installation / Setup Complete</span>
           </div>
           <button class="title-btn" id="btnCancelPostInstallX">✕</button>
         </div>

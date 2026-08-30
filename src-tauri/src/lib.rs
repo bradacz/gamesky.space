@@ -967,15 +967,7 @@ fn discover_executable(game_dir: &Path, preferred_path: Option<&str>) -> Option<
                                 .and_then(|n| n.to_str())
                                 .unwrap_or("")
                                 .to_ascii_lowercase();
-                            if !matches!(
-                                fname.as_str(),
-                                "dos4gw.exe"
-                                    | "dos32a.exe"
-                                    | "cwspdm.exe"
-                                    | "unins000.exe"
-                                    | "setsound.exe"
-                                    | "uninstall.exe"
-                            ) {
+                            if !SUPPORT_BINARIES.contains(&fname.as_str()) {
                                 candidates.push(path);
                             }
                         }
@@ -2504,6 +2496,18 @@ fn is_windows_pe(path: &Path) -> bool {
     file.read_exact(&mut signature).is_ok() && signature == *b"PE\0\0"
 }
 
+/// Runtime helpers shipped beside DOS games that are never the launch target.
+const SUPPORT_BINARIES: [&str; 8] = [
+    "dos4gw.exe",
+    "dos32a.exe",
+    "cwspdm.exe",
+    "cwsdpmi.exe",
+    "pmodew.exe",
+    "unins000.exe",
+    "setsound.exe",
+    "uninstall.exe",
+];
+
 fn score_executable(game_dir: &Path, path: &Path) -> ExecutableCandidate {
     let file_name = path
         .file_name()
@@ -2522,7 +2526,13 @@ fn score_executable(game_dir: &Path, path: &Path) -> ExecutableCandidate {
     let mut role = "game".to_string();
     let mut reasons = Vec::new();
 
-    if ["uninst", "uninstall", "remove"]
+    // DOS extenders and driver helpers sit next to the game and share its
+    // score, so without this they can outrank the real launcher on name order.
+    if SUPPORT_BINARIES.contains(&lower.as_str()) {
+        score -= 900;
+        role = "windows".to_string();
+        reasons.push("runtime support binary, not a game");
+    } else if ["uninst", "uninstall", "remove"]
         .iter()
         .any(|word| lower.contains(word))
     {
@@ -4588,5 +4598,38 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&dest);
+    }
+
+    #[test]
+    fn support_binaries_never_outrank_the_real_launcher() {
+        let dir = std::env::temp_dir().join("gamesky_support_rank_test");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        // Alphabetically DOS4GW sorts first and shares the base score, so name
+        // order alone used to hand it the top spot.
+        for name in ["DOS4GW.EXE", "LAUNCH.EXE", "MAIN.EXE"] {
+            fs::write(dir.join(name), b"MZ").unwrap();
+        }
+
+        let mut ranked: Vec<_> = ["DOS4GW.EXE", "LAUNCH.EXE", "MAIN.EXE"]
+            .iter()
+            .map(|n| score_executable(&dir, &dir.join(n)))
+            .collect();
+        ranked.sort_by(|a, b| {
+            b.score
+                .cmp(&a.score)
+                .then_with(|| a.absolute_path.cmp(&b.absolute_path))
+        });
+
+        assert_ne!(
+            ranked[0].executable, "DOS4GW.EXE",
+            "the DOS extender must not be the top game candidate"
+        );
+        let extender = ranked
+            .iter()
+            .find(|c| c.executable == "DOS4GW.EXE")
+            .unwrap();
+        assert_ne!(extender.role, "game");
+        assert!(extender.score < ranked[0].score);
     }
 }

@@ -166,6 +166,7 @@ const el = {
   btnCancelPostInstallX: document.getElementById('btnCancelPostInstallX') as HTMLButtonElement,
   postInstallDesc: document.getElementById('postInstallDesc') as HTMLParagraphElement,
   postInstallCandidatesList: document.getElementById('postInstallCandidatesList') as HTMLDivElement,
+  postInstallTitle: document.getElementById('postInstallTitle') as HTMLSpanElement,
   btnApplyPostInstallExe: document.getElementById('btnApplyPostInstallExe') as HTMLButtonElement,
   btnSkipPostInstall: document.getElementById('btnSkipPostInstall') as HTMLButtonElement,
 
@@ -195,6 +196,7 @@ const el = {
   // Center Game Saves Button
   btnOpenGameSaves: document.getElementById('btnOpenGameSaves') as HTMLButtonElement,
   btnSetArtwork: document.getElementById('btnSetArtwork') as HTMLButtonElement,
+  btnChooseExecutable: document.getElementById('btnChooseExecutable') as HTMLButtonElement,
 
   // Modal: Saves & Checkpoints
   modalSaves: document.getElementById('modalSaves') as HTMLDivElement,
@@ -735,6 +737,7 @@ function applyEngineSpecificUi(game: GameProfile) {
   el.panelDrives.style.display = isScummvm ? 'none' : '';
   el.panelDosboxConfig.style.display = isScummvm ? 'none' : '';
   el.btnLaunchFileManager.style.display = isScummvm ? 'none' : '';
+  el.btnChooseExecutable.style.display = isScummvm ? 'none' : '';
   if (isScummvm) {
     el.btnLaunchSetup.style.display = 'none';
   }
@@ -766,6 +769,7 @@ function renderSelectedGame() {
     el.panelDrives.style.display = '';
     el.panelDosboxConfig.style.display = '';
     el.btnLaunchFileManager.style.display = '';
+    el.btnChooseExecutable.style.display = '';
     if (el.lblRunDosGame) el.lblRunDosGame.textContent = 'RUN GAME';
     return;
   }
@@ -1193,33 +1197,88 @@ async function checkPostInstallCandidates(game: GameProfile) {
     const topCandidate = gameExecutables[0];
 
     if (currentIsInstaller || (topCandidate && topCandidate.executable.toLowerCase() !== game.executable.toLowerCase())) {
-      postInstallTargetGame = game;
-      postInstallSelectedCandidate = topCandidate;
-      el.postInstallDesc.textContent = `Installation / configuration of "${game.title}" finished. We detected newly configured game executables in this folder:`;
-      el.postInstallCandidatesList.innerHTML = '';
-
-      gameExecutables.forEach((cand, idx) => {
-        const row = document.createElement('div');
-        row.className = `post-install-candidate ${idx === 0 ? 'selected' : ''}`;
-        row.innerHTML = `
-          <div>
-            <strong>${escapeHtml(cand.executable)}</strong>
-            ${cand.workingDir ? `<small style="display:block; opacity:0.8;">Working dir: ${escapeHtml(cand.workingDir)}</small>` : ''}
-          </div>
-          <span style="font-size:11px; opacity:0.8;">${escapeHtml(cand.reason || 'Game')}</span>
-        `;
-        row.addEventListener('click', () => {
-          el.postInstallCandidatesList.querySelectorAll('.post-install-candidate').forEach(r => r.classList.remove('selected'));
-          row.classList.add('selected');
-          postInstallSelectedCandidate = cand;
-        });
-        el.postInstallCandidatesList.appendChild(row);
-      });
-
-      el.modalPostInstall.classList.add('open');
+      showExecutablePicker(
+        game,
+        gameExecutables,
+        `Installation / configuration of "${game.title}" finished. We detected newly configured game executables in this folder:`
+      );
     }
   } catch (err) {
     console.warn('Failed to inspect game folder after install:', err);
+  }
+}
+
+/** Lists executables for a game and lets the user pick which one launches it. */
+function showExecutablePicker(
+  game: GameProfile,
+  candidates: import('./services/emulatorLauncher').ExecutableCandidate[],
+  description: string,
+  title = '🎉 Installation / Setup Complete'
+) {
+  el.postInstallTitle.textContent = title;
+  postInstallTargetGame = game;
+  const current = candidates.find(
+    c => c.executable.toLowerCase() === game.executable.toLowerCase()
+  );
+  postInstallSelectedCandidate = current || candidates[0];
+  el.postInstallDesc.textContent = description;
+  el.postInstallCandidatesList.innerHTML = '';
+
+  candidates.forEach(cand => {
+    const isCurrent = cand === postInstallSelectedCandidate;
+    const row = document.createElement('div');
+    row.className = `post-install-candidate ${isCurrent ? 'selected' : ''}`;
+    const roleLabel = cand.role === 'game' ? '' : ` · ${cand.role}`;
+    row.innerHTML = `
+      <div>
+        <strong>${escapeHtml(cand.executable)}</strong>${isCurrent ? ' <span style="opacity:0.7">(current)</span>' : ''}
+        ${cand.workingDir ? `<small style="display:block; opacity:0.8;">Working dir: ${escapeHtml(cand.workingDir)}</small>` : ''}
+      </div>
+      <span style="font-size:11px; opacity:0.8;">${escapeHtml((cand.reason || 'Game') + roleLabel)}</span>
+    `;
+    row.addEventListener('click', () => {
+      el.postInstallCandidatesList.querySelectorAll('.post-install-candidate').forEach(r => r.classList.remove('selected'));
+      row.classList.add('selected');
+      postInstallSelectedCandidate = cand;
+    });
+    el.postInstallCandidatesList.appendChild(row);
+  });
+
+  el.modalPostInstall.classList.add('open');
+}
+
+/** Opens the picker on demand so a game's launch target can be corrected. */
+async function chooseGameExecutable() {
+  const game = getSelectedGame();
+  if (!game) {
+    alert('Select a game first.');
+    return;
+  }
+  if ((game.settings.emulatorType || prefs.activeEmulator) === 'scummvm') {
+    alert('ScummVM games are launched by engine id, not by an executable.');
+    return;
+  }
+  if (!game.drives.cDrivePath) {
+    alert('This game has no folder configured yet.');
+    return;
+  }
+  soundFX.playButtonClick();
+  try {
+    // Everything runnable is offered, not just the best guess: the automatic
+    // pick is what the user is here to override.
+    const candidates = await EmulatorLauncher.inspectGameFolder(game.drives.cDrivePath);
+    if (candidates.length === 0) {
+      alert('No EXE, COM or BAT file was found in this game folder.');
+      return;
+    }
+    showExecutablePicker(
+      game,
+      candidates,
+      `Choose which file starts "${game.title}".`,
+      '🎯 Choose Launch File'
+    );
+  } catch (error) {
+    alert(`Could not inspect the game folder:\n${String(error)}`);
   }
 }
 
@@ -2365,6 +2424,7 @@ function setupEvents() {
   el.tbGameSaves.addEventListener('click', openSavesModal);
   el.btnOpenGameSaves.addEventListener('click', openSavesModal);
   el.btnSetArtwork.addEventListener('click', handleSetArtwork);
+  el.btnChooseExecutable.addEventListener('click', chooseGameExecutable);
   el.btnCancelSavesX.addEventListener('click', () => el.modalSaves.classList.remove('open'));
   el.btnCloseSaves.addEventListener('click', () => el.modalSaves.classList.remove('open'));
   el.tabLiveSaves.addEventListener('click', () => switchSavesTab('live'));
