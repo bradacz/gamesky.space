@@ -11,8 +11,18 @@ const bundle = resolve(bundleArg);
 const signature = readFileSync(resolve(signatureArg), 'utf8').trim();
 if (!signature) throw new Error('Updater signature file is empty.');
 const baseUrl = process.env.GAMESKY_RELEASE_BASE_URL.replace(/\/$/, '');
+
+// The updater compares the client's version against this one, so it has to
+// track the app rather than sit here as a literal that quietly goes stale.
+const { version } = JSON.parse(
+  readFileSync(resolve(new URL('..', import.meta.url).pathname, 'package.json'), 'utf8')
+);
+if (!/^\d+\.\d+\.\d+/.test(version ?? '')) {
+  throw new Error(`package.json has no usable version (got ${JSON.stringify(version)}).`);
+}
+
 const manifest = {
-  version: '1.0.0',
+  version,
   notes: 'GameSky.space release',
   pub_date: new Date().toISOString(),
   platforms: {
