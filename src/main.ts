@@ -271,6 +271,8 @@ let postInstallTargetGame: GameProfile | null = null;
 let postInstallSelectedCandidate: import('./services/emulatorLauncher').ExecutableCandidate | null = null;
 let selectedGameSetupCandidate: import('./services/emulatorLauncher').ExecutableCandidate | null = null;
 let selectedGameArchives: import('./types').DiscoveredArchiveItem[] = [];
+// Set when the folder being imported holds a ScummVM game rather than a DOS one.
+let pendingScummvmGame: { gameId: string; description: string; path: string } | null = null;
 
 // --------------------------------------------------------------------------
 // INITIALIZATION
@@ -1145,6 +1147,9 @@ async function unpackArchiveDirect(game: GameProfile, archivePath: string) {
         if (detected) {
           game.settings.emulatorType = 'scummvm';
           game.scummvmGameId = detected.gameId;
+          if (detected.path && detected.path.trim() !== '') {
+            game.drives.cDrivePath = detected.path;
+          }
           game.executable = '';
           game.workingDir = '';
           game.drives.cdRomPath = '';
@@ -1604,9 +1609,24 @@ async function inspectImportFolder(folder: string) {
   try {
     const candidates = await EmulatorLauncher.inspectGameFolder(folder);
     if (candidates.length === 0) {
+      // Adventure games run on ScummVM and have no DOS executable at all.
+      const scummvm = await EmulatorLauncher.detectScummvmGame(prefs.scummvmPath, folder)
+        .catch(() => null);
+      if (scummvm) {
+        pendingScummvmGame = scummvm;
+        if (scummvm.path && scummvm.path.trim() !== '') {
+          el.inputFolder.value = scummvm.path;
+        }
+        el.inputExecutable.value = '';
+        if (!el.inputTitle.value.trim()) el.inputTitle.value = scummvm.description;
+        el.presetSuggestionsBox.innerHTML =
+          `<div class="preset-empty">🎮 ScummVM game detected: <b>${escapeHtml(scummvm.description)}</b><br>It will run on ScummVM — no DOS executable needed.</div>`;
+        return;
+      }
       el.presetSuggestionsBox.innerHTML = '<div class="preset-empty">No DOS EXE, COM or BAT file was found.</div>';
       return;
     }
+    pendingScummvmGame = null;
     el.presetSuggestionsBox.innerHTML = '';
     for (const candidate of candidates.slice(0, 8)) {
       const button = document.createElement('button');
@@ -2065,6 +2085,7 @@ function setupEvents() {
     const separator = normalized.lastIndexOf('/');
     const fileName = separator >= 0 ? normalized.slice(separator + 1) : normalized;
     const parentFolder = separator >= 0 ? normalized.slice(0, separator) : '';
+    pendingScummvmGame = null;
     el.inputExecutable.value = fileName;
     if (parentFolder) el.inputFolder.value = parentFolder;
     if (!el.inputTitle.value.trim()) {
@@ -2090,7 +2111,8 @@ function setupEvents() {
     const exec = el.inputExecutable.value.trim();
     const gameFolder = el.inputFolder.value.trim();
 
-    if (!title || !exec || !gameFolder) {
+    const scummvmTarget = pendingScummvmGame;
+    if (!title || !gameFolder || (!exec && !scummvmTarget)) {
       soundFX.playPcSpeakerBeep(300, 0.2);
       alert('Game title, real executable, and game folder are required.');
       return;
@@ -2122,9 +2144,11 @@ function setupEvents() {
       },
       settings: {
         ...automaticSettings,
+        emulatorType: scummvmTarget ? 'scummvm' : automaticSettings.emulatorType,
         fullscreen: el.inputFullscreen.checked,
         settingsLocked: false
       },
+      scummvmGameId: scummvmTarget?.gameId,
       compatibilityProfileVersion: COMPATIBILITY_PROFILE_VERSION,
       ...compatibilityAssessment({
         title,
@@ -2135,12 +2159,18 @@ function setupEvents() {
     };
 
     let verifiedGame: GameProfile;
-    try {
-      verifiedGame = await EmulatorLauncher.prepareGame(newGame);
-    } catch (error) {
-      soundFX.playPcSpeakerBeep(260, 0.25);
-      alert(`The game was not added because its files could not be verified:\n${String(error)}`);
-      return;
+    if (scummvmTarget) {
+      // prepare_game_launch validates a DOS executable on disk; a ScummVM game
+      // is addressed by engine id instead, so there is nothing to verify here.
+      verifiedGame = { ...newGame, compatibilityReason: `ScummVM game '${scummvmTarget.gameId}'` };
+    } else {
+      try {
+        verifiedGame = await EmulatorLauncher.prepareGame(newGame);
+      } catch (error) {
+        soundFX.playPcSpeakerBeep(260, 0.25);
+        alert(`The game was not added because its files could not be verified:\n${String(error)}`);
+        return;
+      }
     }
 
     games.unshift(verifiedGame);
@@ -2149,6 +2179,7 @@ function setupEvents() {
     renderGameList();
     renderSelectedGame();
 
+    pendingScummvmGame = null;
     el.modalGameEdit.classList.remove('open');
   });
 
@@ -2792,6 +2823,7 @@ async function toggleAppFullscreen() {
 
 function openAddGameModal() {
   soundFX.playButtonClick();
+  pendingScummvmGame = null;
   el.inputPresetSearch.value = '';
   renderPresetSuggestions('');
   el.inputTitle.value = '';

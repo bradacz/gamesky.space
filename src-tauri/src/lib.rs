@@ -3307,6 +3307,8 @@ fn spawn_tracked_emulator(request: SpawnRequest) -> LaunchResult {
 pub struct ScummvmGame {
     pub game_id: String,
     pub description: String,
+    /// Folder the data actually lives in, which may be below the one searched.
+    pub path: String,
 }
 
 /// Resolves which ScummVM to use: the configured one when present, otherwise a
@@ -3350,9 +3352,11 @@ fn detect_scummvm_game(
         "ScummVM was not found. Install it or set its path in Configuration.".to_string()
     })?;
 
-    // --path must precede --detect; ScummVM ignores it otherwise.
+    // --path must precede --detect; ScummVM ignores it otherwise. --recursive
+    // lets the user pick the folder they downloaded, not the data subfolder.
     let output = Command::new(&binary)
         .arg(format!("--path={}", dir.to_string_lossy()))
+        .arg("--recursive")
         .arg("--detect")
         .output()
         .map_err(|e| format!("Failed to run ScummVM: {e}"))?;
@@ -3379,9 +3383,15 @@ fn detect_scummvm_game(
             .next()
             .map(|c| c.trim().to_string())
             .unwrap_or_else(|| id.clone());
+        let path = columns
+            .next()
+            .map(|c| c.trim().to_string())
+            .filter(|p| !p.is_empty())
+            .unwrap_or_else(|| dir.to_string_lossy().to_string());
         return Ok(Some(ScummvmGame {
             game_id: id,
             description,
+            path,
         }));
     }
     Ok(None)
@@ -4174,5 +4184,46 @@ mod tests {
         assert_eq!(detected.game_id, "sky");
 
         let _ = fs::remove_dir_all(&dest);
+    }
+
+    #[test]
+    #[ignore = "set GAMESKY_TEST_SCUMMVM_INSTALL to an unpacked GOG ScummVM game"]
+    fn importing_a_scummvm_folder_finds_engine_and_game() {
+        let Ok(root) = std::env::var("GAMESKY_TEST_SCUMMVM_INSTALL") else {
+            return;
+        };
+        let root = PathBuf::from(root);
+        if !root.is_dir() {
+            return;
+        }
+        // The user picks the folder holding the data files; the engine sits
+        // beside it, which is the layout GOG ships.
+        let game_dir = root.join("game");
+        let binary = resolve_scummvm_binary("", &game_dir)
+            .expect("bundled engine should be found from the game folder");
+        let detected = detect_scummvm_game(
+            binary.to_string_lossy().to_string(),
+            game_dir.to_string_lossy().to_string(),
+        )
+        .unwrap()
+        .expect("ScummVM should recognise the game");
+        assert_eq!(detected.game_id, "sky");
+
+        assert_eq!(PathBuf::from(&detected.path), game_dir);
+
+        // Picking the folder the user actually downloaded must work too: the
+        // data sits one level down, and detection reports where it found it.
+        let from_wrapper = detect_scummvm_game(
+            binary.to_string_lossy().to_string(),
+            root.to_string_lossy().to_string(),
+        )
+        .unwrap()
+        .expect("recursive detection should find the game below the wrapper");
+        assert_eq!(from_wrapper.game_id, "sky");
+        assert_eq!(
+            PathBuf::from(&from_wrapper.path),
+            game_dir,
+            "the reported path should point at the data, not the folder searched"
+        );
     }
 }

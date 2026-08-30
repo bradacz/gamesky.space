@@ -172,7 +172,7 @@ export class EmulatorLauncher {
       const { invoke } = await import('@tauri-apps/api/core');
       let targetId = game.scummvmGameId;
       if (!targetId || targetId.trim() === '') {
-        const detected = await invoke<{ gameId: string; description: string } | null>(
+        const detected = await invoke<{ gameId: string; description: string; path: string } | null>(
           'detect_scummvm_game',
           { binaryPath, gameDir }
         );
@@ -202,10 +202,10 @@ export class EmulatorLauncher {
   public static async detectScummvmGame(
     binaryPath: string,
     gameDir: string
-  ): Promise<{ gameId: string; description: string } | null> {
+  ): Promise<{ gameId: string; description: string; path: string } | null> {
     if (!this.isTauriEnvironment()) return null;
     const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<{ gameId: string; description: string } | null>('detect_scummvm_game', {
+    return invoke<{ gameId: string; description: string; path: string } | null>('detect_scummvm_game', {
       binaryPath,
       gameDir
     });
