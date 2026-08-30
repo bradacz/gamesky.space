@@ -175,3 +175,14 @@ export interface UnpackArchiveResult {
   installerCandidates: import('./services/emulatorLauncher').ExecutableCandidate[];
 }
 
+export interface LibraryEntry {
+  name: string;
+  path: string;
+  /** 'game' | 'scummvm' (installed) · 'archive' (needs unpacking) · 'empty' · 'file' */
+  kind: string;
+  title: string;
+  executable: string;
+  workingDir: string;
+  sizeBytes: number;
+  detail: string;
+}

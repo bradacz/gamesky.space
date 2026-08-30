@@ -72,6 +72,12 @@ export class EmulatorLauncher {
     ];
   }
 
+  public static async scanLibraryEntries(baseDir: string): Promise<import('../types').LibraryEntry[]> {
+    if (!this.isTauriEnvironment()) return [];
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<import('../types').LibraryEntry[]>('scan_library_entries', { baseDir });
+  }
+
   public static async scanInstalledGames(baseDir: string): Promise<DiscoveredGame[]> {
     if (!this.isTauriEnvironment()) return [];
     try {

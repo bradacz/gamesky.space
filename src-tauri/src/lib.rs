@@ -967,7 +967,9 @@ fn discover_executable(game_dir: &Path, preferred_path: Option<&str>) -> Option<
                                 .and_then(|n| n.to_str())
                                 .unwrap_or("")
                                 .to_ascii_lowercase();
-                            if !SUPPORT_BINARIES.contains(&fname.as_str()) {
+                            if !SUPPORT_BINARIES.contains(&fname.as_str())
+                                && !AUXILIARY_PROGRAMS.contains(&fname.as_str())
+                            {
                                 candidates.push(path);
                             }
                         }
@@ -2496,6 +2498,22 @@ fn is_windows_pe(path: &Path) -> bool {
     file.read_exact(&mut signature).is_ok() && signature == *b"PE\0\0"
 }
 
+/// Programs shipped with DOS games that are not the game: manuals, catalogues
+/// and order forms. They can be run, so they stay in the pick list, but they
+/// must never win automatic selection — HELP.EXE inside a HELP folder used to,
+/// because the name matched its directory.
+const AUXILIARY_PROGRAMS: [&str; 9] = [
+    "help.exe",
+    "readme.exe",
+    "manual.exe",
+    "order.exe",
+    "vendor.exe",
+    "catalog.exe",
+    "view.exe",
+    "license.exe",
+    "orderfrm.exe",
+];
+
 /// Runtime helpers shipped beside DOS games that are never the launch target.
 const SUPPORT_BINARIES: [&str; 8] = [
     "dos4gw.exe",
@@ -2532,6 +2550,10 @@ fn score_executable(game_dir: &Path, path: &Path) -> ExecutableCandidate {
         score -= 900;
         role = "windows".to_string();
         reasons.push("runtime support binary, not a game");
+    } else if AUXILIARY_PROGRAMS.contains(&lower.as_str()) {
+        score -= 500;
+        role = "documentation".to_string();
+        reasons.push("manual or utility, not the game");
     } else if ["uninst", "uninstall", "remove"]
         .iter()
         .any(|word| lower.contains(word))
@@ -3169,6 +3191,139 @@ fn discover_cd_media(game_dir: &Path) -> Option<String> {
     Some(game_dir.to_string_lossy().to_string())
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryEntry {
+    pub name: String,
+    pub path: String,
+    /// "game" (installed and runnable), "archive" (needs unpacking),
+    /// "empty" (a folder with nothing runnable) or "file" (unrelated).
+    pub kind: String,
+    pub title: String,
+    pub executable: String,
+    pub working_dir: String,
+    pub size_bytes: u64,
+    pub detail: String,
+}
+
+/// Lists what actually sits in the library folder, classified, so the user can
+/// decide what belongs in the library instead of the scan guessing for them.
+#[tauri::command]
+fn scan_library_entries(base_dir: String) -> Result<Vec<LibraryEntry>, String> {
+    let root = expand_home_path(base_dir.trim());
+    if !root.is_dir() {
+        return Ok(Vec::new());
+    }
+    let entries = fs::read_dir(&root)
+        .map_err(|e| format!("Failed to read '{}': {e}", root.display()))?
+        .flatten()
+        .collect::<Vec<_>>();
+
+    let mut listed = Vec::new();
+    for entry in entries {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') || name == "__MACOSX" {
+            continue;
+        }
+        let path = entry.path();
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+
+        let (kind, title, executable, working_dir, detail) = if file_type.is_dir() {
+            match discover_executable(&path, None) {
+                Some((working_dir, executable)) => (
+                    "game",
+                    name.replace(['_', '-'], " "),
+                    executable.clone(),
+                    working_dir,
+                    format!("Installed game, starts {executable}"),
+                ),
+                None if resolve_scummvm_binary("", &path).is_some()
+                    || path.join("game").is_dir() && resolve_scummvm_binary("", &path.join("game")).is_some() =>
+                {
+                    (
+                        "scummvm",
+                        name.replace(['_', '-'], " "),
+                        String::new(),
+                        String::new(),
+                        "Installed ScummVM game".to_string(),
+                    )
+                }
+                None => {
+                    // Only an archive sitting at the top counts as "not unpacked".
+                    // Recursing deeper would label an installed game an archive
+                    // because of a zip buried inside a bundled engine.
+                    let archives =
+                        scan_game_archives(path.to_string_lossy().to_string())
+                            .unwrap_or_default()
+                            .into_iter()
+                            .filter(|a| !a.relative_path.contains('/'))
+                            .collect::<Vec<_>>();
+                    match archives.first() {
+                        Some(archive) => (
+                            "archive",
+                            clean_game_package_title(&name),
+                            archive.file_name.clone(),
+                            String::new(),
+                            format!("Not unpacked yet ({})", archive.file_name),
+                        ),
+                        None => (
+                            "empty",
+                            name.replace(['_', '-'], " "),
+                            String::new(),
+                            String::new(),
+                            "No runnable file found".to_string(),
+                        ),
+                    }
+                }
+            }
+        } else {
+            match detect_archive_format(&path) {
+                Some(format) => (
+                    "archive",
+                    clean_game_package_title(&name),
+                    name.clone(),
+                    String::new(),
+                    format!("Installer or archive ({format})"),
+                ),
+                None => (
+                    "file",
+                    name.clone(),
+                    String::new(),
+                    String::new(),
+                    "Not a game or archive".to_string(),
+                ),
+            }
+        };
+
+        listed.push(LibraryEntry {
+            name,
+            path: path.to_string_lossy().to_string(),
+            kind: kind.to_string(),
+            title: title.split_whitespace().collect::<Vec<_>>().join(" "),
+            executable,
+            working_dir,
+            size_bytes: entry.metadata().map(|m| m.len()).unwrap_or(0),
+            detail,
+        });
+    }
+
+    listed.sort_by(|a, b| {
+        // Installed games first, then things that could become games.
+        let rank = |k: &str| match k {
+            "game" | "scummvm" => 0,
+            "archive" => 1,
+            "empty" => 2,
+            _ => 3,
+        };
+        rank(&a.kind)
+            .cmp(&rank(&b.kind))
+            .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+    });
+    Ok(listed)
+}
+
 #[tauri::command]
 fn scan_installed_games(base_dir: String) -> Result<Vec<DiscoveredGame>, String> {
     let root = expand_home_path(base_dir.trim());
@@ -3240,64 +3395,13 @@ fn scan_installed_games(base_dir: String) -> Result<Vec<DiscoveredGame>, String>
                 executable,
                 cd_rom_path,
             });
-        } else {
-            // Check if directory has an archive inside it
-            let archives = scan_game_archives(path.to_string_lossy().to_string()).unwrap_or_default();
-            if let Some(first_archive) = archives.first() {
-                let title = clean_game_package_title(&name);
-                let cd_rom_path = discover_cd_media(&path);
-                discovered_slugs.insert(normalized_slug);
-                discovered_slugs.insert(title.to_ascii_lowercase());
-                games.push(DiscoveredGame {
-                    title,
-                    target_folder: path.to_string_lossy().to_string(),
-                    working_dir: String::new(),
-                    executable: first_archive.file_name.clone(),
-                    cd_rom_path,
-                });
-            }
         }
+        // A folder holding only an archive is not an installed game. It shows up
+        // in the library manager, where unpacking it is a deliberate choice.
     }
 
-    // 2. Process standalone package / archive files only if not already extracted
-    for entry in &entries {
-        let Ok(file_type) = entry.file_type() else {
-            continue;
-        };
-        if !file_type.is_file() || file_type.is_symlink() {
-            continue;
-        }
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with('.') || name == "__MACOSX" {
-            continue;
-        }
-
-        if let Some(_fmt) = detect_archive_format(&path) {
-            let title = clean_game_package_title(&name);
-            let slug = title.to_ascii_lowercase();
-
-            // Check if this game was already registered from an extracted folder
-            if discovered_slugs.iter().any(|s| slug.contains(s) || s.contains(&slug)) {
-                continue;
-            }
-
-            let folder_name = clean_game_package_folder_name(&name);
-            let dedicated_folder = root.join(&folder_name);
-            if dedicated_folder.is_dir() {
-                continue;
-            }
-
-            discovered_slugs.insert(slug);
-            games.push(DiscoveredGame {
-                title,
-                target_folder: path.to_string_lossy().to_string(),
-                working_dir: String::new(),
-                executable: name,
-                cd_rom_path: None,
-            });
-        }
-    }
+    // Standalone installers and archives in the library folder are left to the
+    // library manager: the library lists what is installed, not what could be.
 
     games.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
     Ok(games)
@@ -3849,6 +3953,7 @@ pub fn run() {
             open_folder_in_finder,
             cache_artwork,
             import_artwork_file,
+            scan_library_entries,
             detect_scummvm_game,
             launch_scummvm_command,
             open_catalog_source,
@@ -4631,5 +4736,65 @@ mod tests {
             .unwrap();
         assert_ne!(extender.role, "game");
         assert!(extender.score < ranked[0].score);
+    }
+
+    #[test]
+    fn documentation_programs_lose_to_the_game() {
+        let dir = std::env::temp_dir().join("gamesky_aux_rank_test");
+        let _ = fs::remove_dir_all(&dir);
+        // Wolfenstein ships HELP.EXE inside a HELP folder, so the "file matches
+        // its folder" bonus used to hand it the top spot over the game itself.
+        let help_dir = dir.join("WOLF3D").join("HELP");
+        fs::create_dir_all(&help_dir).unwrap();
+        fs::write(help_dir.join("HELP.EXE"), b"MZ").unwrap();
+        fs::write(dir.join("WOLF3D").join("WOLF3D.EXE"), b"MZ").unwrap();
+
+        let (_, executable) =
+            discover_executable(&dir, None).expect("a game executable should be found");
+        assert_eq!(executable, "WOLF3D.EXE");
+
+        let help = score_executable(&dir, &help_dir.join("HELP.EXE"));
+        assert_eq!(help.role, "documentation");
+        let game = score_executable(&dir, &dir.join("WOLF3D").join("WOLF3D.EXE"));
+        assert!(game.score > help.score);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn only_installed_games_are_auto_added() {
+        let root = std::env::temp_dir().join("gamesky_scan_scope_test");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+
+        // An installed game.
+        fs::create_dir_all(root.join("RealGame")).unwrap();
+        fs::write(root.join("RealGame").join("PLAY.BAT"), b"@echo off").unwrap();
+        // A loose installer, and a folder holding only an archive: neither is
+        // installed, so neither belongs in the library.
+        let mut zip = Vec::from(*b"PK\x03\x04");
+        zip.extend_from_slice(&[0u8; 64]);
+        fs::write(root.join("setup_something.zip"), &zip).unwrap();
+        fs::create_dir_all(root.join("NotUnpacked")).unwrap();
+        fs::write(root.join("NotUnpacked").join("game.zip"), &zip).unwrap();
+
+        let auto = scan_installed_games(root.to_string_lossy().to_string()).unwrap();
+        let titles: Vec<&str> = auto.iter().map(|g| g.title.as_str()).collect();
+        assert_eq!(titles, vec!["RealGame"], "only the installed game is added");
+
+        // The manager still shows everything, classified.
+        let listed = scan_library_entries(root.to_string_lossy().to_string()).unwrap();
+        let kind_of = |title: &str| {
+            listed
+                .iter()
+                .find(|e| e.title.contains(title))
+                .map(|e| e.kind.clone())
+                .unwrap_or_default()
+        };
+        assert_eq!(kind_of("RealGame"), "game");
+        assert_eq!(kind_of("setup something"), "archive");
+        assert_eq!(kind_of("NotUnpacked"), "archive");
+
+        let _ = fs::remove_dir_all(&root);
     }
 }

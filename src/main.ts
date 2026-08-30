@@ -197,6 +197,14 @@ const el = {
   btnOpenGameSaves: document.getElementById('btnOpenGameSaves') as HTMLButtonElement,
   btnSetArtwork: document.getElementById('btnSetArtwork') as HTMLButtonElement,
   btnChooseExecutable: document.getElementById('btnChooseExecutable') as HTMLButtonElement,
+  tbLibraryManager: document.getElementById('tbLibraryManager') as HTMLButtonElement,
+  modalLibraryManager: document.getElementById('modalLibraryManager') as HTMLDivElement,
+  libraryManagerPath: document.getElementById('libraryManagerPath') as HTMLParagraphElement,
+  libraryManagerList: document.getElementById('libraryManagerList') as HTMLDivElement,
+  btnCloseLibraryManagerX: document.getElementById('btnCloseLibraryManagerX') as HTMLButtonElement,
+  btnCloseLibraryManager: document.getElementById('btnCloseLibraryManager') as HTMLButtonElement,
+  btnRefreshLibraryManager: document.getElementById('btnRefreshLibraryManager') as HTMLButtonElement,
+  btnOpenLibraryFolder: document.getElementById('btnOpenLibraryFolder') as HTMLButtonElement,
 
   // Modal: Saves & Checkpoints
   modalSaves: document.getElementById('modalSaves') as HTMLDivElement,
@@ -1245,6 +1253,127 @@ function showExecutablePicker(
   });
 
   el.modalPostInstall.classList.add('open');
+}
+
+/** Shows what is in the games folder and what the library made of it. */
+async function openLibraryManager() {
+  soundFX.playButtonClick();
+  const baseDir = prefs.defaultCDrive || '~/DOSGAMES';
+  el.libraryManagerPath.textContent = baseDir;
+  el.libraryManagerList.innerHTML = '<div class="preset-empty">Scanning…</div>';
+  el.modalLibraryManager.classList.add('open');
+  await renderLibraryManager(baseDir);
+}
+
+async function renderLibraryManager(baseDir: string) {
+  let entries: import('./types').LibraryEntry[] = [];
+  try {
+    entries = await EmulatorLauncher.scanLibraryEntries(baseDir);
+  } catch (error) {
+    el.libraryManagerList.innerHTML = `<div class="preset-empty">${escapeHtml(String(error))}</div>`;
+    return;
+  }
+  if (entries.length === 0) {
+    el.libraryManagerList.innerHTML = '<div class="preset-empty">This folder is empty.</div>';
+    return;
+  }
+
+  el.libraryManagerList.innerHTML = '';
+  for (const entry of entries) {
+    const inLibrary = games.some(g => g.drives.cDrivePath === entry.path);
+    const icon = entry.kind === 'archive' ? '📦'
+      : entry.kind === 'scummvm' ? '🎮'
+      : entry.kind === 'game' ? '💾'
+      : entry.kind === 'empty' ? '📁' : '📄';
+
+    const row = document.createElement('div');
+    row.className = 'post-install-candidate';
+    row.style.cursor = 'default';
+    row.innerHTML = `
+      <div>
+        <strong>${icon} ${escapeHtml(entry.title)}</strong>
+        ${inLibrary ? ' <span style="opacity:0.7">(in library)</span>' : ''}
+        <small style="display:block; opacity:0.8;">${escapeHtml(entry.detail)}</small>
+      </div>
+    `;
+
+    const actions = document.createElement('div');
+    actions.style.display = 'flex';
+    actions.style.gap = '4px';
+
+    if (entry.kind === 'archive') {
+      const unpack = document.createElement('button');
+      unpack.className = 'btn-3d';
+      unpack.textContent = 'Unpack';
+      unpack.addEventListener('click', () => void unpackFromLibraryManager(entry, baseDir));
+      actions.appendChild(unpack);
+    } else if ((entry.kind === 'game' || entry.kind === 'scummvm') && !inLibrary) {
+      const add = document.createElement('button');
+      add.className = 'btn-3d';
+      add.textContent = 'Add';
+      add.addEventListener('click', () => void addFromLibraryManager(entry, baseDir));
+      actions.appendChild(add);
+    }
+
+    row.appendChild(actions);
+    el.libraryManagerList.appendChild(row);
+  }
+}
+
+/** Adds an entry the automatic scan left out, e.g. a ScummVM game. */
+async function addFromLibraryManager(entry: import('./types').LibraryEntry, baseDir: string) {
+  soundFX.playButtonClick();
+  const isScummvm = entry.kind === 'scummvm';
+  let scummvmGameId: string | undefined;
+  let folder = entry.path;
+
+  if (isScummvm) {
+    const detected = await EmulatorLauncher.detectScummvmGame(prefs.scummvmPath, entry.path)
+      .catch(() => null);
+    if (!detected) {
+      alert('ScummVM did not recognise a game in this folder.');
+      return;
+    }
+    scummvmGameId = detected.gameId;
+    if (detected.path) folder = detected.path;
+  }
+
+  const settings = recommendedSettingsForGame({ title: entry.title }, prefs.activeEmulator);
+  games.unshift({
+    id: `game-${Date.now()}`,
+    title: entry.title,
+    developer: 'Unknown',
+    genre: 'DOS game',
+    executable: isScummvm ? '' : entry.executable,
+    scummvmGameId,
+    workingDir: isScummvm ? '' : entry.workingDir,
+    drives: { cDrivePath: folder, cdRomPath: '', floppyPath: '' },
+    settings: { ...settings, emulatorType: isScummvm ? 'scummvm' : settings.emulatorType },
+    installationState: 'ready',
+    compatibilityProfileVersion: COMPATIBILITY_PROFILE_VERSION,
+    createdAt: Date.now()
+  });
+  StorageService.saveGames(games);
+  renderGameList();
+  renderSelectedGame();
+  await renderLibraryManager(baseDir);
+}
+
+async function unpackFromLibraryManager(entry: import('./types').LibraryEntry, baseDir: string) {
+  soundFX.playButtonClick();
+  const target = `${baseDir}/${entry.title.replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'GAME'}`;
+  const archivePath = entry.kind === 'archive' && entry.executable && entry.executable !== entry.name
+    ? `${entry.path}/${entry.executable}`
+    : entry.path;
+
+  el.libraryManagerList.innerHTML = '<div class="preset-empty">Unpacking…</div>';
+  try {
+    const res = await EmulatorLauncher.unpackGameArchive(archivePath, target, true, false);
+    alert(res.success ? res.message : `Failed to unpack:\n${res.message}`);
+  } catch (error) {
+    alert(`Failed to unpack:\n${String(error)}`);
+  }
+  await renderLibraryManager(baseDir);
 }
 
 /** Opens the picker on demand so a game's launch target can be corrected. */
@@ -2425,6 +2554,20 @@ function setupEvents() {
   el.btnOpenGameSaves.addEventListener('click', openSavesModal);
   el.btnSetArtwork.addEventListener('click', handleSetArtwork);
   el.btnChooseExecutable.addEventListener('click', chooseGameExecutable);
+  el.tbLibraryManager.addEventListener('click', openLibraryManager);
+  el.btnCloseLibraryManagerX.addEventListener('click', () => el.modalLibraryManager.classList.remove('open'));
+  el.btnCloseLibraryManager.addEventListener('click', () => el.modalLibraryManager.classList.remove('open'));
+  el.btnRefreshLibraryManager.addEventListener('click', () => {
+    void renderLibraryManager(prefs.defaultCDrive || '~/DOSGAMES');
+  });
+  el.btnOpenLibraryFolder.addEventListener('click', async () => {
+    soundFX.playButtonClick();
+    if (!EmulatorLauncher.isTauriEnvironment()) return;
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('open_folder_in_finder', {
+      folderPath: prefs.defaultCDrive || '~/DOSGAMES'
+    }).catch(() => undefined);
+  });
   el.btnCancelSavesX.addEventListener('click', () => el.modalSaves.classList.remove('open'));
   el.btnCloseSaves.addEventListener('click', () => el.modalSaves.classList.remove('open'));
   el.tabLiveSaves.addEventListener('click', () => switchSavesTab('live'));
