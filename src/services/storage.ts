@@ -132,7 +132,7 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   defaultCDrive: '~/DOSGAMES',
   crtFilterEnabled: false,
   soundEffectsEnabled: true,
-  theme: 'norton-blue',
+  theme: 'apple-light',
   setupCompleted: false,
   language: 'en',
   automaticArtwork: true,

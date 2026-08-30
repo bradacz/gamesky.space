@@ -291,7 +291,7 @@ async function init() {
   const nativeState = await StorageService.initializeNativePersistence();
   games = nativeState?.games ?? StorageService.loadGames();
   prefs = nativeState?.preferences ?? StorageService.loadPreferences();
-  migrateToNortonRefresh();
+  migrateToAppleLight();
   applyPreferences();
   loadSavedColumnWidths();
 
@@ -351,10 +351,11 @@ function formatPlayTime(totalSeconds = 0): string {
   return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
 }
 
-function migrateToNortonRefresh() {
-  const migrationKey = 'dosbox_retro_norton_refresh_v1';
+/** Moves existing installs to the new default look, once. */
+function migrateToAppleLight() {
+  const migrationKey = 'gamesky_apple_light_default_v1';
   if (localStorage.getItem(migrationKey)) return;
-  prefs.theme = 'norton-blue';
+  prefs.theme = 'apple-light';
   StorageService.savePreferences(prefs);
   localStorage.setItem(migrationKey, '1');
 }
@@ -538,11 +539,11 @@ function applyPreferences() {
   el.cfgXPath.value = prefs.dosboxXPath;
   el.cfgScummvmPath.value = prefs.scummvmPath;
   el.cfgDefaultDir.value = prefs.defaultCDrive;
-  el.cfgThemeSelect.value = prefs.theme || 'classic-win95';
+  el.cfgThemeSelect.value = prefs.theme || 'apple-light';
   el.cfgAudioEnabled.checked = prefs.soundEffectsEnabled;
   el.cfgCheckUpdates.checked = prefs.checkForUpdates;
 
-  applyTheme(prefs.theme || 'classic-win95');
+  applyTheme(prefs.theme || 'apple-light');
 }
 
 function applyTheme(themeName: string) {
@@ -2064,7 +2065,7 @@ function setupEvents() {
   el.tbThemeToggle.addEventListener('click', () => {
     soundFX.playButtonClick();
     const themes: AppPreferences['theme'][] = ['classic-win95', 'norton-blue', 'dos-matrix', 'apple-light'];
-    const currentIdx = themes.indexOf(prefs.theme || 'classic-win95');
+    const currentIdx = themes.indexOf(prefs.theme || 'apple-light');
     const nextTheme = themes[(currentIdx + 1) % themes.length];
     prefs.theme = nextTheme;
     StorageService.savePreferences(prefs);
