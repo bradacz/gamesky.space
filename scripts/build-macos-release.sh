@@ -61,6 +61,22 @@ app_path="$project_dir/src-tauri/target/universal-apple-darwin/release/bundle/ma
 dmg_candidates=("$project_dir"/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg(N))
 (( ${#dmg_candidates[@]} == 1 )) || fail 'Expected exactly one Universal DMG artifact.'
 dmg_path=$dmg_candidates[1]
+
+# Tauri notarizes the .app and then builds the DMG from it, so the DMG itself
+# carries no ticket. Gatekeeper checks the artifact the user downloads, so the
+# DMG has to be submitted and stapled in its own right.
+print 'Notarizing the DMG…'
+if [[ -n ${APPLE_API_KEY:-} && -n ${APPLE_API_ISSUER:-} && -n ${APPLE_API_KEY_PATH:-} ]]; then
+  xcrun notarytool submit "$dmg_path" \
+    --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" \
+    --wait || fail 'Notarization of the DMG failed.'
+else
+  xcrun notarytool submit "$dmg_path" \
+    --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" \
+    --wait || fail 'Notarization of the DMG failed.'
+fi
+xcrun stapler staple "$dmg_path" || fail 'Could not staple the notarization ticket to the DMG.'
+
 "$project_dir/scripts/verify-macos-release.sh" "$app_path" "$dmg_path"
 
 print "Release ready: $dmg_path"
