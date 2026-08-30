@@ -1309,6 +1309,10 @@ fn detect_archive_format(path: &Path) -> Option<String> {
             if bytes_read >= 6 && &header[..6] == b"7z\xbc\xaf\x27\x1c" {
                 return Some("7z".to_string());
             }
+            // macOS installer package (xar container), as used by GOG's Mac builds.
+            if &header[..4] == b"xar!" {
+                return Some("pkg".to_string());
+            }
             if bytes_read >= 7
                 && (&header[..7] == b"Rar!\x1a\x07\x00" || &header[..7] == b"Rar!\x1a\x07\x01")
             {
@@ -1355,6 +1359,7 @@ fn detect_archive_format(path: &Path) -> Option<String> {
         "rar" => Some("rar".to_string()),
         "arj" => Some("arj".to_string()),
         "lha" | "lzh" => Some("lha".to_string()),
+        "pkg" => Some("pkg".to_string()),
         _ => {
             if name.contains("package.exe") || name.contains(".sfx.exe") {
                 Some("sfx_exe".to_string())
@@ -1594,6 +1599,122 @@ fn try_extract_with_cli(tool_name: &str, args: &[&str]) -> bool {
     false
 }
 
+/// Unpacks a macOS installer package (xar) as shipped by GOG. The game lives in
+/// a gzipped cpio payload inside, and the useful part is the `Resources/game`
+/// folder of the wrapped .app — the surrounding bundle is launcher plumbing.
+fn extract_macos_pkg(archive: &Path, destination: &Path) -> Result<(), String> {
+    let staging = destination.join(".pkg-staging");
+    let _ = fs::remove_dir_all(&staging);
+    fs::create_dir_all(&staging)
+        .map_err(|e| format!("Failed to create staging directory: {e}"))?;
+
+    let xar_ok = Command::new("/usr/bin/xar")
+        .arg("-xf")
+        .arg(archive)
+        .arg("-C")
+        .arg(&staging)
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if !xar_ok {
+        let _ = fs::remove_dir_all(&staging);
+        return Err("Failed to open the .pkg archive.".to_string());
+    }
+
+    let mut payloads = Vec::new();
+    fn find_payloads(dir: &Path, out: &mut Vec<PathBuf>, depth: usize) {
+        if depth > 3 {
+            return;
+        }
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    find_payloads(&path, out, depth + 1);
+                } else if matches!(
+                    path.file_name().and_then(|n| n.to_str()),
+                    Some("Scripts") | Some("Payload")
+                ) {
+                    out.push(path);
+                }
+            }
+        }
+    }
+    find_payloads(&staging, &mut payloads, 0);
+    if payloads.is_empty() {
+        let _ = fs::remove_dir_all(&staging);
+        return Err("The .pkg contains no installable payload.".to_string());
+    }
+
+    let unpacked = staging.join("unpacked");
+    fs::create_dir_all(&unpacked)
+        .map_err(|e| format!("Failed to create payload directory: {e}"))?;
+    let mut any = false;
+    for payload in &payloads {
+        // Payloads are gzipped cpio; cpio reads stdin and writes into its cwd.
+        let script = format!(
+            "gunzip -c {} | cpio -i --quiet 2>/dev/null",
+            shell_single_quote(&payload.to_string_lossy())
+        );
+        let ok = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(&script)
+            .current_dir(&unpacked)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        any |= ok;
+    }
+    if !any {
+        let _ = fs::remove_dir_all(&staging);
+        return Err("Failed to unpack the .pkg payload.".to_string());
+    }
+
+    // Prefer the wrapped app's game folder; fall back to the whole payload.
+    let mut game_root = None;
+    fn find_game_dir(dir: &Path, out: &mut Option<PathBuf>, depth: usize) {
+        if out.is_some() || depth > 6 {
+            return;
+        }
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_dir() {
+                    continue;
+                }
+                if path.file_name().and_then(|n| n.to_str()) == Some("game")
+                    && path
+                        .parent()
+                        .and_then(|p| p.file_name())
+                        .and_then(|n| n.to_str())
+                        == Some("Resources")
+                {
+                    *out = Some(path);
+                    return;
+                }
+                find_game_dir(&path, out, depth + 1);
+            }
+        }
+    }
+    find_game_dir(&unpacked, &mut game_root, 0);
+    let source_root = game_root.unwrap_or(unpacked);
+
+    if let Ok(entries) = fs::read_dir(&source_root) {
+        for entry in entries.flatten() {
+            let target = destination.join(entry.file_name());
+            if !target.exists() {
+                let _ = fs::rename(entry.path(), &target);
+            }
+        }
+    }
+    let _ = fs::remove_dir_all(&staging);
+    Ok(())
+}
+
+fn shell_single_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', r"'\''"))
+}
+
 #[tauri::command]
 fn unpack_game_archive(
     archive_path: String,
@@ -1622,6 +1743,12 @@ fn unpack_game_archive(
         let archive_str = archive_p.to_string_lossy().to_string();
 
         let mut extracted = false;
+
+        // 0. macOS .pkg (xar) — its payload needs a different pipeline entirely.
+        if detect_archive_format(&archive_p).as_deref() == Some("pkg") {
+            extract_macos_pkg(&archive_p, &dest_p)?;
+            extracted = true;
+        }
 
         // 1. Try innoextract (specialized for OldGames.sk and Inno Setup Windows packages)
         if !extracted {
@@ -1713,9 +1840,27 @@ fn unpack_game_archive(
         }
     }
 
+    // A package can unpack cleanly yet hold nothing DOSBox can run — GOG's Mac
+    // builds of ScummVM titles are the common case. Say so instead of leaving
+    // the caller with a game entry that has no executable.
+    let engine_note = if files.is_empty() {
+        let scummvm = dest_p.join("scummvm").exists() || dest_p.join("game").join("configfile").is_file();
+        if scummvm {
+            Some(" No DOS executable was found — this release runs on ScummVM, which this launcher does not drive.")
+        } else {
+            Some(" No DOS executable was found in this package.")
+        }
+    } else {
+        None
+    };
+
     let message = match gog_layout.as_ref().and_then(|l| l.title.as_ref()) {
         Some(title) => format!("Unpacked GOG release '{title}' into '{}'.", dest_p.display()),
         None => format!("Successfully unpacked archive into '{}'.", dest_p.display()),
+    };
+    let message = match engine_note {
+        Some(note) => format!("{message}{note}"),
+        None => message,
     };
 
     Ok(UnpackArchiveResult {
@@ -3653,5 +3798,80 @@ mod tests {
         assert!(import_artwork_into(&dir, "game-local-abc", "/nope/missing.png", 5000).is_err());
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn xar_container_is_detected_as_pkg() {
+        let dir = std::env::temp_dir().join("gamesky_xar_detect_test");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let pkg = dir.join("installer.pkg");
+        let mut header = Vec::from(*b"xar!");
+        header.extend_from_slice(&[0u8; 24]);
+        fs::write(&pkg, &header).unwrap();
+        assert_eq!(detect_archive_format(&pkg).as_deref(), Some("pkg"));
+
+        // Extension alone is enough when the bytes are unreadable as anything else.
+        let by_ext = dir.join("other.pkg");
+        fs::write(&by_ext, b"not a xar container at all").unwrap();
+        assert_eq!(detect_archive_format(&by_ext).as_deref(), Some("pkg"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[ignore = "set GAMESKY_TEST_PKG to a GOG macOS .pkg"]
+    fn macos_pkg_payload_is_unpacked() {
+        let Ok(pkg) = std::env::var("GAMESKY_TEST_PKG") else {
+            return;
+        };
+        let pkg = PathBuf::from(pkg);
+        if !pkg.is_file() {
+            return;
+        }
+        assert_eq!(detect_archive_format(&pkg).as_deref(), Some("pkg"));
+
+        let dest = std::env::temp_dir().join("gamesky_pkg_unpack_test");
+        let _ = fs::remove_dir_all(&dest);
+        fs::create_dir_all(&dest).unwrap();
+
+        extract_macos_pkg(&pkg, &dest).expect("pkg payload should unpack");
+        // The wrapped app's Resources/game folder is hoisted to the root.
+        assert!(dest.join("game").is_dir(), "game data should be present");
+        assert!(dest.join("scummvm").exists(), "bundled engine should be present");
+        assert!(!dest.join(".pkg-staging").exists(), "staging should be cleaned up");
+
+        let mut exes = Vec::new();
+        collect_executable_files(&dest, 0, &mut exes);
+        assert!(exes.is_empty(), "a ScummVM release has no DOS executable");
+
+        let _ = fs::remove_dir_all(&dest);
+    }
+
+    #[test]
+    #[ignore = "set GAMESKY_TEST_PKG to a GOG macOS .pkg"]
+    fn scummvm_release_reports_that_dosbox_cannot_run_it() {
+        let Ok(pkg) = std::env::var("GAMESKY_TEST_PKG") else {
+            return;
+        };
+        if !PathBuf::from(&pkg).is_file() {
+            return;
+        }
+        let dest = std::env::temp_dir().join("gamesky_pkg_message_test");
+        let _ = fs::remove_dir_all(&dest);
+
+        let result = unpack_game_archive(pkg, dest.to_string_lossy().to_string(), false, false)
+            .expect("unpack should succeed");
+
+        assert!(result.success);
+        assert!(result.discovered_executable.is_none());
+        assert!(
+            result.message.contains("ScummVM"),
+            "message should explain why it will not run: {}",
+            result.message
+        );
+
+        let _ = fs::remove_dir_all(&dest);
     }
 }
