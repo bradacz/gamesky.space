@@ -67,7 +67,21 @@ version = "1.1.0"
 Manifest `latest.json` přebírá verzi z `tauri.conf.json`. Updater porovnává
 právě ji, takže vydání bez zvýšení verze nikomu nenabídne aktualizaci.
 
-### Krok 2: Spuštění celého release procesu jedním příkazem
+### Krok 2: Commit, push a tag — **před** buildem
+
+Publikovaná binárka musí mít svůj zdroj na GitHubu, jinak vznikne vydání,
+které nejde zrekonstruovat, a `origin/main` neodpovídá tomu, co je venku:
+
+```bash
+git add -A && git commit -m "release: 1.1.0"
+git push origin main
+git tag -a v1.1.0 -m "GameSky.space 1.1.0" && git push origin v1.1.0
+```
+
+Teprve potom se staví a nasazuje. Pořadí je vždy:
+**commit ➔ push ➔ tag ➔ build ➔ deploy**
+
+### Krok 3: Spuštění celého release procesu jedním příkazem
 V kořenovém adresáři projektu spusťte:
 ```bash
 npm run release:deploy
