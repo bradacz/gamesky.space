@@ -100,6 +100,11 @@ console.log(`⚡ CDN Base URL:     ${cdnBaseUrl}`);
 console.log('------------------------------------------------------------');
 
 // Helper to upload file via HTTP PUT
+// Every uploaded name, so the cache purge covers all of them. Purging only
+// some leaves the CDN serving a stale updater archive against a fresh
+// manifest, and the signature check then rejects the update.
+const uploadedNames = [];
+
 async function uploadToBunnyStorage(localFilePath, remoteFileName, contentType = 'application/octet-stream') {
   const remoteUrl = `https://${storageEndpoint}/${storageZone}/${storagePath}/releases/${encodeURIComponent(remoteFileName)}`;
   console.log(`⬆️  Uploading: ${remoteFileName} (${(statSync(localFilePath).size / (1024 * 1024)).toFixed(2)} MB)...`);
@@ -118,6 +123,7 @@ async function uploadToBunnyStorage(localFilePath, remoteFileName, contentType =
     const errorText = await response.text();
     throw new Error(`Failed to upload ${remoteFileName} (${response.status} ${response.statusText}): ${errorText}`);
   }
+  uploadedNames.push(remoteFileName);
   console.log(`✅ Uploaded:  ${remoteFileName}`);
 }
 
@@ -138,6 +144,7 @@ async function uploadStringContent(content, remoteFileName, contentType = 'appli
     const errorText = await response.text();
     throw new Error(`Failed to upload ${remoteFileName} (${response.status} ${response.statusText}): ${errorText}`);
   }
+  uploadedNames.push(remoteFileName);
   console.log(`✅ Uploaded:  ${remoteFileName}`);
 }
 
@@ -214,9 +221,10 @@ async function run() {
     const manifestJson = JSON.stringify(updateManifest, null, 2);
     await uploadStringContent(manifestJson, 'latest.json', 'application/json');
 
-    // 5. Purge Cache for latest.json and latest DMG
-    await purgeBunnyCdnUrl(publicUrl('latest.json'));
-    await purgeBunnyCdnUrl(publicUrl('GameSky.space-latest.dmg'));
+    // 5. Purge every file we just uploaded
+    for (const name of [...new Set(uploadedNames)]) {
+      await purgeBunnyCdnUrl(publicUrl(name));
+    }
 
     console.log('\n🎉 ========================================================');
     console.log('✅ RELEASE DEPLOYMENT COMPLETE!');

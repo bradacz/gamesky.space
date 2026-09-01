@@ -176,14 +176,15 @@ fn configured_updater(app: &tauri::AppHandle) -> Result<tauri_plugin_updater::Up
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| "Updater public key was not embedded in this build".to_string())?;
-    let endpoint = "https://gamesky.space/releases/latest.json"
-        .parse()
-        .map_err(|error| format!("Invalid update endpoint: {error}"))?;
+    // The endpoint comes from the bundled updater config, which the release
+    // build points at the CDN path the artifacts are actually uploaded to.
+    // Hardcoding it here overrode that and aimed at the website, whose SPA
+    // fallback answers unknown paths with index.html — an HTTP 200 carrying
+    // HTML, so the updater fetched a page instead of a manifest and no update
+    // was ever found.
     app.updater_builder()
         .pubkey(public_key)
         .target("macos-universal")
-        .endpoints(vec![endpoint])
-        .map_err(|error| format!("Failed to configure updater endpoint: {error}"))?
         .build()
         .map_err(|error| format!("Failed to initialize updater: {error}"))
 }
