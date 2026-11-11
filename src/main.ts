@@ -3,6 +3,8 @@ import { StorageService, AppPreferences } from './services/storage';
 import { generateDosboxConf } from './services/confGenerator';
 import { soundFX } from './services/soundEffects';
 import { EmulatorLauncher } from './services/emulatorLauncher';
+import { EmbeddedWindowsPlayer } from './services/embeddedWindowsPlayer';
+import { WindowsRuntime } from './services/windowsRuntime';
 import { searchPresets } from './database/dosGamePresets';
 import { ArchiveDownloader, ArchiveGameItem, CatalogSource } from './services/archiveDownloader';
 import { SaveManager } from './services/saveManager';
@@ -108,6 +110,8 @@ const el = {
 
   // Modal: Game Profile Editor
   modalGameEdit: document.getElementById('modalGameEdit') as HTMLDivElement,
+  btnImportGameZip: document.getElementById('btnImportGameZip') as HTMLButtonElement,
+  automaticImportStatus: document.getElementById('automaticImportStatus') as HTMLParagraphElement,
   btnCancelEditX: document.getElementById('btnCancelEditX') as HTMLButtonElement,
   btnCancelProfile: document.getElementById('btnCancelProfile') as HTMLButtonElement,
   btnSaveProfile: document.getElementById('btnSaveProfile') as HTMLButtonElement,
@@ -143,6 +147,8 @@ const el = {
   cfgStagingPath: document.getElementById('cfgStagingPath') as HTMLInputElement,
   cfgXPath: document.getElementById('cfgXPath') as HTMLInputElement,
   cfgScummvmPath: document.getElementById('cfgScummvmPath') as HTMLInputElement,
+  btnInstallWindowsEngine: document.getElementById('btnInstallWindowsEngine') as HTMLButtonElement,
+  windowsInstallStatus: document.getElementById('windowsInstallStatus') as HTMLDivElement,
   panelDrives: document.getElementById('panelDrives') as HTMLDivElement,
   panelDosboxConfig: document.getElementById('panelDosboxConfig') as HTMLDivElement,
   cfgDefaultDir: document.getElementById('cfgDefaultDir') as HTMLInputElement,
@@ -460,7 +466,7 @@ async function initializeNativeLibrary() {
       installationState: isPackageArchive ? 'needs-attention' : 'ready',
       createdAt: Date.now()
     };
-    games.push(discoveredProfile);
+    games.push(await EmulatorLauncher.prepareGame(discoveredProfile).catch(() => discoveredProfile));
     changed = true;
   }
 
@@ -746,11 +752,14 @@ function renderGameList() {
  *  manages its own engine settings, so those panels are hidden for its games. */
 function applyEngineSpecificUi(game: GameProfile) {
   const isScummvm = (game.settings.emulatorType || prefs.activeEmulator) === 'scummvm';
-  el.panelDrives.style.display = isScummvm ? 'none' : '';
-  el.panelDosboxConfig.style.display = isScummvm ? 'none' : '';
-  el.btnLaunchFileManager.style.display = isScummvm ? 'none' : '';
+  const embedded = game.settings.emulatorType === 'boxedwine';
+  const externalEngine = isScummvm || embedded;
+  el.panelDrives.style.display = externalEngine ? 'none' : '';
+  el.panelDosboxConfig.style.display = externalEngine ? 'none' : '';
+  el.btnLaunchFileManager.style.display = externalEngine ? 'none' : '';
+  el.btnGameControls.style.display = externalEngine ? 'none' : '';
   el.btnChooseExecutable.style.display = isScummvm ? 'none' : '';
-  if (isScummvm) {
+  if (externalEngine) {
     el.btnLaunchSetup.style.display = 'none';
   }
 }
@@ -881,6 +890,10 @@ function renderSelectedGame() {
   // Status Bar
   el.sbSelectedText.textContent = `${game.title.toUpperCase()} - Selected`;
   el.sbCpuText.textContent = `CPU: Normal [${s.cycles}]`;
+  if (s.emulatorType === 'boxedwine') {
+    el.centerPath.textContent = `${game.drives.cDrivePath}/${game.executable}`;
+    el.sbCpuText.textContent = 'Embedded Windows player';
+  }
   el.btnRunDosGame.disabled = launchingGameId !== null;
   el.btnLaunchFileManager.disabled = launchingGameId !== null;
   void updateGameActionButtons(game);
@@ -955,7 +968,13 @@ async function launchGameDirect(requestedGame: GameProfile) {
   renderGameList();
   soundFX.playLaunchChime();
 
-  const res = await EmulatorLauncher.launchGame(game, prefs);
+  try {
+    Object.assign(game, await EmulatorLauncher.prepareGame(game));
+    StorageService.saveGames(games);
+  } catch { /* The launcher reports file validation errors below. */ }
+  const res = game.settings.emulatorType === 'boxedwine'
+    ? await EmbeddedWindowsPlayer.open(game, prefs, message => { el.centerStatus.textContent = message; })
+    : await EmulatorLauncher.launchGame(game, prefs);
   launchingGameId = null;
 
   if (res.success) {
@@ -1025,6 +1044,11 @@ async function updateGameActionButtons(game: GameProfile) {
   }
 
   // 2. Check setup/installer candidates
+  if (game.settings.emulatorType === 'boxedwine' || game.settings.emulatorType === 'scummvm') {
+    selectedGameSetupCandidate = null;
+    el.btnLaunchSetup.style.display = 'none';
+    return;
+  }
   try {
     const candidates = await EmulatorLauncher.inspectGameFolder(game.drives.cDrivePath);
     const setupCandidate = candidates.find(c => c.role === 'installer' || c.role === 'configuration');
@@ -1152,10 +1176,17 @@ async function unpackArchiveDirect(game: GameProfile, archivePath: string) {
         game.title = res.discoveredTitle.trim();
       }
 
+      const windows = await windowsGameCandidate(destinationFolder);
+      if (windows && !res.discoveredExecutable) {
+        game.executable = windows.executable;
+        game.workingDir = windows.workingDir;
+      }
+      if (game.executable) Object.assign(game, await EmulatorLauncher.prepareGame(game));
+
       // No DOS executable can still mean a playable game: GOG's Mac releases of
       // adventure titles ship ScummVM data. Ask ScummVM before giving up.
       let scummvmNote = '';
-      if (!res.discoveredExecutable) {
+      if (!res.discoveredExecutable && !windows) {
         const detected = await EmulatorLauncher.detectScummvmGame(
           prefs.scummvmPath,
           destinationFolder
@@ -1176,12 +1207,13 @@ async function unpackArchiveDirect(game: GameProfile, archivePath: string) {
 
       game.installationState = 'ready';
       game.compatibilityConfidence = 'high';
-      if (!game.compatibilityReason?.startsWith('ScummVM')) {
+      if (!game.compatibilityReason?.startsWith('ScummVM') && game.settings.emulatorType !== 'boxedwine') {
         game.compatibilityReason = 'Extracted package archive';
       }
       StorageService.saveGames(games);
       renderGameList();
       renderSelectedGame();
+      await prepareImportedRuntime(game).catch(() => {});
       alert(`Package extracted successfully! Extracted ${res.extractedFilesCount} file(s) into:\n${destinationFolder}${res.discoveredCdRomPath ? `\n\n💿 Auto-mounted CD-ROM media:\n${res.discoveredCdRomPath}` : ''}${scummvmNote}`);
     } else {
       soundFX.playPcSpeakerBeep(260, 0.25);
@@ -1377,7 +1409,7 @@ async function addFromLibraryManager(entry: import('./types').LibraryEntry, base
   }
 
   const settings = recommendedSettingsForGame({ title: entry.title }, prefs.activeEmulator);
-  games.unshift({
+  const profile: GameProfile = {
     id: `game-${Date.now()}`,
     title: entry.title,
     developer: 'Unknown',
@@ -1390,11 +1422,17 @@ async function addFromLibraryManager(entry: import('./types').LibraryEntry, base
     installationState: 'ready',
     compatibilityProfileVersion: COMPATIBILITY_PROFILE_VERSION,
     createdAt: Date.now()
-  });
+  };
+  try {
+    const prepared = await EmulatorLauncher.prepareGame(profile);
+    games.unshift(prepared); selectedGameId = prepared.id;
+  } catch (error) { alert(String(error)); return; }
   StorageService.saveGames(games);
   renderGameList();
   renderSelectedGame();
   await renderLibraryManager(baseDir);
+  const added = getSelectedGame();
+  if (added) await prepareImportedRuntime(added).catch(() => {});
 }
 
 async function unpackFromLibraryManager(entry: import('./types').LibraryEntry, baseDir: string) {
@@ -1513,7 +1551,9 @@ function showGameContextMenu(x: number, y: number, game: GameProfile) {
   };
 
   addItem(`Play ${game.title}`, '▶', () => void launchGameDirect(game));
-  addItem('Open in DOS File Manager (NC)', '📁', () => void launchFileManagerDirect(game));
+  if (game.settings.emulatorType !== 'boxedwine' && game.settings.emulatorType !== 'scummvm') {
+    addItem('Open in DOS File Manager (NC)', '📁', () => void launchFileManagerDirect(game));
+  }
   if (selectedGameSetupCandidate) {
     addItem(`Run Setup (${selectedGameSetupCandidate.executable})`, '⚙️', () => {
       if (selectedGameSetupCandidate) void launchSetupDirect(game, selectedGameSetupCandidate);
@@ -1841,8 +1881,77 @@ async function saveControlsProfile() {
   el.modalControls.classList.remove('open');
 }
 
+async function prepareImportedRuntime(game: GameProfile) {
+  if (game.settings.emulatorType !== 'boxedwine') return;
+  try {
+    await WindowsRuntime.ensureReady(message => {
+      el.centerStatus.textContent = message;
+      el.automaticImportStatus.textContent = message;
+    });
+    el.centerStatus.textContent = 'Status: Ready to play';
+  } catch (error) {
+    const message = `Game added. Windows support could not be prepared: ${String(error)}. Click Run Game to retry.`;
+    el.centerStatus.textContent = message;
+    el.automaticImportStatus.textContent = message;
+    throw new Error(message);
+  }
+}
+
+async function importGameZipAutomatically() {
+  if (!EmulatorLauncher.isTauriEnvironment()) return;
+  const archivePath = await EmulatorLauncher.browseForFile({ title: 'Import a game ZIP', extensions: ['zip'] });
+  if (!archivePath) return;
+  el.btnImportGameZip.disabled = true;
+  el.btnSaveProfile.disabled = true;
+  el.automaticImportStatus.textContent = 'Unpacking and detecting the game…';
+  let importedFolder = '';
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const imported = await invoke<{ destinationFolder: string; result: import('./types').UnpackArchiveResult }>('import_game_archive', {
+      archivePath, libraryFolder: prefs.defaultCDrive || '~/DOSGAMES'
+    });
+    importedFolder = imported.destinationFolder;
+    if (!imported.result.success) throw new Error(imported.result.message);
+    const candidates = await EmulatorLauncher.inspectGameFolder(importedFolder);
+    const best = candidates.find(c => c.windowsPe && c.executable.toLowerCase() === 'east-drive.exe')
+      || candidates.find(c => c.role === 'game' && c.score > 0)
+      || candidates.find(c => c.windowsPe && !/^(setup|install|unins|config|remove|help|readme|manual)/i.test(c.executable));
+    if (!best) {
+      el.inputFolder.value = importedFolder;
+      await inspectImportFolder(importedFolder);
+      el.automaticImportStatus.textContent = 'Archive unpacked. Choose the game executable below to finish adding it.';
+      return;
+    }
+    const title = best.windowsPe && best.executable.toLowerCase() === 'east-drive.exe' ? 'East Drive'
+      : imported.result.discoveredTitle || importedFolder.split('/').pop()!.replace(/[_-]+/g, ' ');
+    const profile = await EmulatorLauncher.prepareGame({
+      id: `game-${Date.now()}`, title, developer: 'Unknown', genre: 'DOS game',
+      executable: best.executable, workingDir: best.workingDir,
+      drives: { cDrivePath: importedFolder, cdRomPath: imported.result.discoveredCdRomPath || '', floppyPath: '' },
+      settings: recommendedSettingsForGame({ title }, prefs.activeEmulator),
+      installationState: 'ready', createdAt: Date.now()
+    });
+    games.unshift(profile); selectedGameId = profile.id;
+    StorageService.saveGames(games); renderGameList(); renderSelectedGame();
+    await prepareImportedRuntime(profile);
+    el.automaticImportStatus.textContent = `${profile.title} is ready to play.`;
+    el.modalGameEdit.classList.remove('open');
+  } catch (error) {
+    el.automaticImportStatus.textContent = `${String(error)}${importedFolder ? ` Files are in ${importedFolder}.` : ''}`;
+  } finally {
+    el.btnImportGameZip.disabled = false;
+    el.btnSaveProfile.disabled = false;
+  }
+}
+
+async function windowsGameCandidate(folder: string) {
+  const candidates = await EmulatorLauncher.inspectGameFolder(folder);
+  return candidates.find(c => c.windowsPe && c.executable.toLowerCase() === 'east-drive.exe')
+    || candidates.find(c => c.windowsPe && !/^(setup|install|unins|config|remove)/i.test(c.executable));
+}
+
 async function inspectImportFolder(folder: string) {
-  el.presetSuggestionsBox.innerHTML = '<div class="preset-empty">Scanning DOS executables…</div>';
+  el.presetSuggestionsBox.innerHTML = '<div class="preset-empty">Scanning game executables…</div>';
   try {
     const candidates = await EmulatorLauncher.inspectGameFolder(folder);
     if (candidates.length === 0) {
@@ -1860,7 +1969,7 @@ async function inspectImportFolder(folder: string) {
           `<div class="preset-empty">🎮 ScummVM game detected: <b>${escapeHtml(scummvm.description)}</b><br>It will run on ScummVM — no DOS executable needed.</div>`;
         return;
       }
-      el.presetSuggestionsBox.innerHTML = '<div class="preset-empty">No DOS EXE, COM or BAT file was found.</div>';
+      el.presetSuggestionsBox.innerHTML = '<div class="preset-empty">No game EXE, COM or BAT file was found.</div>';
       return;
     }
     pendingScummvmGame = null;
@@ -1872,7 +1981,7 @@ async function inspectImportFolder(folder: string) {
       button.innerHTML = `<b>${escapeHtml(candidate.executable)}</b><span>${escapeHtml(candidate.reason)}</span><small>${escapeHtml(candidate.workingDir || 'Game root')} · score ${candidate.score}</small>`;
       button.addEventListener('click', () => {
         el.inputExecutable.value = candidate.executable;
-        el.inputFolder.value = folder;
+        el.inputFolder.value = candidate.workingDir ? `${folder}/${candidate.workingDir.replace(/\\/g, '/')}` : folder;
         if (!el.inputTitle.value.trim()) {
           el.inputTitle.value = folder.split('/').filter(Boolean).pop()?.replace(/[_-]+/g, ' ') || candidate.executable;
         }
@@ -1880,9 +1989,12 @@ async function inspectImportFolder(folder: string) {
       });
       el.presetSuggestionsBox.appendChild(button);
     }
-    const best = candidates.find(candidate => candidate.role === 'game' && candidate.score > 0);
+    const best = candidates.find(candidate => candidate.role === 'game' && candidate.score > 0)
+      || candidates.find(c => c.windowsPe && c.executable.toLowerCase() === 'east-drive.exe')
+      || candidates.find(c => c.windowsPe && !/^(setup|install|unins|config|remove)/i.test(c.executable));
     if (best) {
       el.inputExecutable.value = best.executable;
+      el.inputFolder.value = best.workingDir ? `${folder}/${best.workingDir.replace(/\\/g, '/')}` : folder;
       if (!el.inputTitle.value.trim()) {
         el.inputTitle.value = folder.split('/').filter(Boolean).pop()?.replace(/[_-]+/g, ' ') || best.executable;
       }
@@ -2308,6 +2420,7 @@ function setupEvents() {
   el.btnSaveControls.addEventListener('click', () => void saveControlsProfile());
 
   // Modal Game Profile Editor
+  el.btnImportGameZip.addEventListener('click', () => void importGameZipAutomatically());
   el.btnCancelEditX.addEventListener('click', () => el.modalGameEdit.classList.remove('open'));
   el.btnCancelProfile.addEventListener('click', () => el.modalGameEdit.classList.remove('open'));
   el.inputPresetSearch.addEventListener('input', () => {
@@ -2330,7 +2443,7 @@ function setupEvents() {
 
   el.btnModalBrowseExecutable.addEventListener('click', async () => {
     const executablePath = await EmulatorLauncher.browseForFile({
-      title: 'Select the real DOS game executable',
+      title: 'Select the DOS or Windows game executable',
       extensions: ['exe', 'com', 'bat']
     });
     if (!executablePath) return;
@@ -2435,6 +2548,7 @@ function setupEvents() {
 
     pendingScummvmGame = null;
     el.modalGameEdit.classList.remove('open');
+    await prepareImportedRuntime(verifiedGame).catch(() => {});
   });
 
   function openConfigModal() {
@@ -2512,6 +2626,24 @@ function setupEvents() {
     if (p) el.cfgScummvmPath.value = p;
   });
 
+  el.btnInstallWindowsEngine.addEventListener('click', async () => {
+    if (!EmulatorLauncher.isTauriEnvironment()) return;
+    el.btnInstallWindowsEngine.disabled = true;
+    el.windowsInstallStatus.textContent = 'Downloading and verifying the Windows engine…';
+    let unlisten: (() => void) | undefined;
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const { listen } = await import('@tauri-apps/api/event');
+      unlisten = await listen<number>('windows-install-progress', event => {
+        el.windowsInstallStatus.textContent = event.payload < 100
+          ? `Downloading: ${event.payload}%` : 'Verifying and unpacking…';
+      });
+      await invoke('install_embedded_runtime');
+      el.windowsInstallStatus.textContent = 'Windows engine ready. Games will run inside GameSky.';
+    } catch (error) { el.windowsInstallStatus.textContent = String(error); }
+    finally { unlisten?.(); el.btnInstallWindowsEngine.disabled = false; }
+  });
+
   el.btnBrowseDefaultDir.addEventListener('click', async () => {
     soundFX.playButtonClick();
     const p = await EmulatorLauncher.browseForFolder('Select Default DOS Games Folder (C:\\)');
@@ -2540,13 +2672,18 @@ function setupEvents() {
   // Post-Install modal
   el.btnCancelPostInstallX.addEventListener('click', () => el.modalPostInstall.classList.remove('open'));
   el.btnSkipPostInstall.addEventListener('click', () => el.modalPostInstall.classList.remove('open'));
-  el.btnApplyPostInstallExe.addEventListener('click', () => {
+  el.btnApplyPostInstallExe.addEventListener('click', async () => {
     if (postInstallTargetGame && postInstallSelectedCandidate) {
       soundFX.playButtonClick();
       postInstallTargetGame.executable = postInstallSelectedCandidate.executable;
       if (postInstallSelectedCandidate.workingDir !== undefined) {
         postInstallTargetGame.workingDir = postInstallSelectedCandidate.workingDir;
       }
+      if (!postInstallSelectedCandidate.windowsPe && postInstallTargetGame.settings.emulatorType === 'boxedwine') {
+        postInstallTargetGame.settings.emulatorType = prefs.activeEmulator;
+      }
+      try { Object.assign(postInstallTargetGame, await EmulatorLauncher.prepareGame(postInstallTargetGame)); }
+      catch (error) { alert(String(error)); return; }
       postInstallTargetGame.installationState = 'ready';
       StorageService.saveGames(games);
       renderGameList();
@@ -2634,10 +2771,10 @@ function setupEvents() {
   el.tabCheckpoints.addEventListener('click', () => switchSavesTab('checkpoints'));
   el.btnRefreshLiveSaves.addEventListener('click', refreshLiveSaves);
   el.btnCreateCheckpoint.addEventListener('click', handleCreateCheckpoint);
-  el.btnOpenFinderSaves.addEventListener('click', () => {
+  el.btnOpenFinderSaves.addEventListener('click', async () => {
     const game = getSelectedGame();
     if (game && game.drives.cDrivePath) {
-      SaveManager.openInFinder(game.drives.cDrivePath);
+      SaveManager.openInFinder(await gameSaveDirectory(game));
     }
   });
 }
@@ -2908,7 +3045,13 @@ async function runAutoDetectEmulators() {
 // --------------------------------------------------------------------------
 // SAVE MANAGER & CHECKPOINTS
 // --------------------------------------------------------------------------
-function openSavesModal() {
+async function gameSaveDirectory(game: GameProfile): Promise<string> {
+  if (game.settings.emulatorType !== 'boxedwine' || !EmulatorLauncher.isTauriEnvironment()) return game.drives.cDrivePath;
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<string>('windows_save_directory', { gameId: game.id });
+}
+
+async function openSavesModal() {
   soundFX.playButtonClick();
   const game = getSelectedGame();
   if (!game) {
@@ -2917,7 +3060,7 @@ function openSavesModal() {
   }
 
   el.savesGameTitle.textContent = `💾 Saves for: ${game.title}`;
-  el.savesGameFolder.textContent = `Folder: ${game.drives.cDrivePath || '[Not configured]'}`;
+  el.savesGameFolder.textContent = `Folder: ${await gameSaveDirectory(game) || '[Not configured]'}`;
   el.inputCheckpointName.value = '';
   el.savesStatusBanner.textContent = '';
 
@@ -2950,7 +3093,7 @@ async function refreshLiveSaves() {
   }
 
   el.liveSavesList.innerHTML = '<div style="padding:10px; color:#555">Scanning game directory for save files...</div>';
-  const saves = await SaveManager.scanGameSaves(game.drives.cDrivePath);
+  const saves = await SaveManager.scanGameSaves(await gameSaveDirectory(game));
 
   if (saves.length === 0) {
     el.liveSavesList.innerHTML = '<div style="padding:10px; color:#666">No active save files found in game folder yet. Play the game and save in-game to see files here.</div>';
@@ -3012,7 +3155,7 @@ async function refreshCheckpoints() {
       if (confirm(`Restore checkpoint "${chk.name}"? This will overwrite current in-game saves with this snapshot.`)) {
         btnRestore.disabled = true;
         btnRestore.textContent = 'Restoring...';
-        const ok = await SaveManager.restoreCheckpoint(game.id, game.drives.cDrivePath, chk.folderPath);
+        const ok = await SaveManager.restoreCheckpoint(game.id, await gameSaveDirectory(game), chk.folderPath);
         btnRestore.disabled = false;
         btnRestore.textContent = '⏪ Restore';
         if (ok) {
@@ -3055,7 +3198,7 @@ async function handleCreateCheckpoint() {
   el.btnCreateCheckpoint.textContent = 'Saving...';
 
   try {
-    const res = await SaveManager.createCheckpoint(game.id, game.drives.cDrivePath, name);
+    const res = await SaveManager.createCheckpoint(game.id, await gameSaveDirectory(game), name);
     soundFX.playLaunchChime();
     el.savesStatusBanner.textContent = `✓ Created checkpoint "${res.name}" with ${res.fileCount} files!`;
     el.inputCheckpointName.value = '';
@@ -3094,6 +3237,7 @@ function openAddGameModal() {
   soundFX.playButtonClick();
   pendingScummvmGame = null;
   el.inputPresetSearch.value = '';
+  el.automaticImportStatus.textContent = 'Choose a ZIP to detect the game and prepare its engine automatically.';
   renderPresetSuggestions('');
   el.inputTitle.value = '';
   el.inputExecutable.value = '';

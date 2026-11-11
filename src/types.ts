@@ -1,4 +1,4 @@
-export type EmulatorType = 'dosbox' | 'dosbox-staging' | 'dosbox-x' | 'scummvm' | 'custom';
+export type EmulatorType = 'dosbox' | 'dosbox-staging' | 'dosbox-x' | 'scummvm' | 'boxedwine' | 'custom';
 
 export type MachineType = 'vga' | 'svga_s3' | 'svga_et4000' | 'svga_paradise' | 'cga' | 'ega' | 'tandy' | 'hercules' | 'pc98';
 

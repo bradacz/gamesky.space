@@ -55,6 +55,9 @@ const storageEndpoint = REGION_ENDPOINTS[storageRegion] || 'storage.bunnycdn.com
 const releasesBasePath = `${storagePath ? `/${storagePath}` : ''}/releases`;
 const publicUrl = name => `${cdnBaseUrl}${releasesBasePath}/${encodeURIComponent(name)}`;
 
+const tauriConf = JSON.parse(readFileSync(resolve(projectRoot, 'src-tauri/tauri.conf.json'), 'utf8'));
+const appVersion = tauriConf.version;
+
 // 1. Locate release artifacts
 const tauriTargetDir = resolve(projectRoot, 'src-tauri/target/universal-apple-darwin/release/bundle');
 const dmgDir = resolve(tauriTargetDir, 'dmg');
@@ -65,7 +68,7 @@ if (!existsSync(dmgDir)) {
   process.exit(1);
 }
 
-const dmgFiles = readdirSync(dmgDir).filter(f => f.endsWith('.dmg'));
+const dmgFiles = readdirSync(dmgDir).filter(f => f.endsWith(`_${appVersion}_universal.dmg`));
 if (dmgFiles.length === 0) {
   console.error('❌ No .dmg file found in bundle/dmg/');
   process.exit(1);
@@ -87,8 +90,8 @@ if (existsSync(macosDir)) {
 }
 
 // Read version from tauri.conf.json
-const tauriConf = JSON.parse(readFileSync(resolve(projectRoot, 'src-tauri/tauri.conf.json'), 'utf8'));
-const appVersion = tauriConf.version || '1.0.0';
+const releaseNotesPath = resolve(projectRoot, `RELEASE-NOTES-${appVersion}.md`);
+const releaseNotes = existsSync(releaseNotesPath) ? readFileSync(releaseNotesPath, 'utf8').trim() : `GameSky.space v${appVersion} release for macOS (Universal Apple Silicon & Intel).`;
 
 console.log('🚀 ========================================================');
 console.log(`📦 Deploying GameSky.space v${appVersion} to Bunny.net`);
@@ -173,6 +176,9 @@ async function purgeBunnyCdnUrl(urlToPurge) {
 
 async function run() {
   try {
+    if (!tarGzPath || !sigPath || !readFileSync(sigPath, 'utf8').trim()) {
+      throw new Error('Signed updater artifacts are required before publishing any release files.');
+    }
     // 1. Upload DMG
     await uploadToBunnyStorage(dmgPath, basename(dmgPath));
 
@@ -200,7 +206,7 @@ async function run() {
 
     const updateManifest = {
       version: appVersion,
-      notes: `GameSky.space v${appVersion} release for macOS (Universal Apple Silicon & Intel).`,
+      notes: releaseNotes,
       pub_date: new Date().toISOString(),
       platforms: {
         'darwin-aarch64': {

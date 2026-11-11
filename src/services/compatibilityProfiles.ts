@@ -80,7 +80,7 @@ export function applyAutomaticCompatibilityProfile(
     return game;
   }
 
-  if (game.settings.settingsLocked) {
+  if (game.settings.settingsLocked || game.settings.emulatorType === 'boxedwine' || game.settings.emulatorType === 'scummvm') {
     return {
       ...game,
       compatibilityProfileVersion: COMPATIBILITY_PROFILE_VERSION,

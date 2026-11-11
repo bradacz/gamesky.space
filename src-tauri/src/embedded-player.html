@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>GameSky Player</title>
+<style>
+html,body{margin:0;width:100%;height:100%;background:#080b12;color:#e9efff;font:14px system-ui;overflow:hidden}
+#toolbar{height:48px;box-sizing:border-box;display:flex;align-items:center;gap:16px;padding:8px 16px;background:#192237}
+#playerStatus{flex:1;font-size:12px}button{padding:6px 12px;cursor:pointer}#dropzone{height:calc(100% - 48px);display:flex;align-items:center;justify-content:center}
+canvas{max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain;image-rendering:pixelated;outline:none}
+#loading{position:absolute;top:60px;left:12px;z-index:2;background:#151b2b;padding:8px 12px;border-radius:6px}
+#output{display:none;position:absolute;bottom:0;left:0;box-sizing:border-box;width:100%;height:30%;background:#0b1020;color:#c8d9fa;font:12px monospace;z-index:3}#legacy{display:none}
+</style></head><body>
+<div id="toolbar"><strong>GameSky Player</strong><span id="playerStatus">Loading game…</span><button id="compatibility">Compatibility mode</button><button id="diagnostics">Diagnostics</button><button id="closePlayer">Save & close</button><button id="forceClose" hidden>Close without saving</button></div>
+<div id="loading"><span id="status">Loading Windows engine…</span><progress id="progress"></progress><span id="spinner"></span></div>
+<div id="dropzone"><canvas id="canvas" tabindex="0" aria-label="Game screen"></canvas></div>
+<textarea id="output" aria-label="Engine log"></textarea>
+<div id="legacy"><button id="startbtn"></button><span id="sound-checkbox"><input id="soundToggle" type="checkbox"></span>
+<input id="showConsole" type="checkbox"><input id="pointerLock" type="checkbox"><input id="resize" type="checkbox"></div>
+<script src="boxedwine-shell.js"></script><script src="bridge.js"></script>
+</body></html>

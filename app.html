@@ -39,7 +39,7 @@
         <!-- 90s TOOLBAR -->
         <div class="toolbar">
           <button class="btn-3d toolbar-btn toolbar-btn-wide" id="tbNewGame" title="Add a real game from disk"><b>[+]</b> <span>ADD GAME</span></button>
-          <button class="btn-3d toolbar-btn toolbar-btn-wide" id="tbOpenPresets" title="Load a real DOS game from HDD or flash drive"><b>[A:]</b> <span>FROM DISK</span></button>
+          <button class="btn-3d toolbar-btn toolbar-btn-wide" id="tbOpenPresets" title="Load a DOS or Windows game from HDD or flash drive"><b>[A:]</b> <span>FROM DISK</span></button>
           <button class="btn-3d toolbar-btn toolbar-btn-wide toolbar-primary" id="tbOnlineArchive" title="Browse downloadable DOS games"><b>[@]</b> <span>CATALOG</span></button>
           <button class="btn-3d toolbar-btn toolbar-btn-wide" id="tbGameSaves" title="Game Saves &amp; Checkpoints Vault"><b>[S]</b> <span>SAVES</span></button>
           <button class="btn-3d toolbar-btn" id="tbSaveLibrary" title="Export a portable GameSky.space backup">EX</button>
@@ -272,6 +272,8 @@
         <div class="modal-content">
           
           <div class="field-block">
+            <button class="btn-3d" id="btnImportGameZip">Import game ZIP automatically</button>
+            <p id="automaticImportStatus" role="status">Choose a ZIP to detect the game and prepare its engine automatically.</p>
             <span class="field-label" style="color:var(--win-blue)">Optional compatibility settings lookup (does not add game files):</span>
             <input type="text" id="inputPresetSearch" class="folder-input" placeholder="Type a game name to look up recommended DOSBox settings">
             <div class="game-list-box win-inset" id="presetSuggestionsBox" style="max-height:100px; margin-top:2px"></div>
@@ -395,6 +397,12 @@
               <button class="btn-3d" id="btnBrowseScummvm">Browse...</button>
             </div>
             <div style="font-size:11px; opacity:0.75; margin-top:2px;">Used for adventure games that run on ScummVM instead of DOSBox.</div>
+          </div>
+
+          <div class="field-block">
+            <span class="field-label">Windows games inside GameSky (experimental):</span>
+            <button class="btn-3d" id="btnInstallWindowsEngine">Install Windows engine — free</button>
+            <div id="windowsInstallStatus" style="font-size:12px;margin-top:4px;">BoxedWine is open source. Optional download: about 120 MB. Games stay inside this window.</div>
           </div>
 
           <div class="field-block">

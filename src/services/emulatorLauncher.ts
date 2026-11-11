@@ -39,6 +39,7 @@ export interface ExecutableCandidate {
   score: number;
   role: 'game' | 'installer' | 'configuration' | 'uninstaller' | 'windows';
   reason: string;
+  windowsPe: boolean;
 }
 
 export interface DiagnosticItem {
@@ -102,6 +103,9 @@ export class EmulatorLauncher {
     options?: import('./confGenerator').GenerateConfOptions
   ): Promise<LaunchResult> {
     const emuType = game.settings.emulatorType || prefs.activeEmulator;
+    if (emuType === 'boxedwine') {
+      return { success: false, message: 'Windows games use the embedded GameSky player.' };
+    }
     
     let binaryPath = prefs.dosboxPath;
     if (emuType === 'dosbox-staging') binaryPath = prefs.dosboxStagingPath;
@@ -293,6 +297,23 @@ export class EmulatorLauncher {
     if (!this.isTauriEnvironment()) return game;
 
     const { invoke } = await import('@tauri-apps/api/core');
+    if (game.settings.emulatorType === 'scummvm') return game;
+    const candidates = await this.inspectGameFolder(game.drives.cDrivePath);
+    const relative = `${game.workingDir ? `${game.workingDir}/` : ''}${game.executable}`.replace(/\\/g, '/').toLowerCase();
+    const selected = candidates.find(c => `${c.workingDir ? `${c.workingDir}/` : ''}${c.executable}`.replace(/\\/g, '/').toLowerCase() === relative);
+    if (selected?.windowsPe || game.settings.emulatorType === 'boxedwine') {
+      const prepared = await invoke<PreparedGameLaunch>('prepare_windows_game', {
+        gameDir: game.drives.cDrivePath, workingDir: game.workingDir || '', executable: game.executable
+      });
+      return { ...game, executable: prepared.executable, workingDir: prepared.workingDir,
+        title: prepared.executable.toLowerCase() === 'east-drive.exe' && /^east[-_ ]?drive$/i.test(game.title) ? 'East Drive' : game.title,
+        developer: prepared.executable.toLowerCase() === 'east-drive.exe' && (!game.developer || game.developer === 'Unknown') ? 'SledgeHV' : game.developer,
+        drives: { ...game.drives, cDrivePath: prepared.cDrivePath },
+        settings: { ...game.settings, emulatorType: 'boxedwine', settingsLocked: true },
+        genre: game.genre === 'DOS game' ? 'Windows game' : game.genre,
+        compatibilityReason: prepared.executable.toLowerCase() === 'east-drive.exe'
+          ? 'East Drive · embedded Windows player (experimental)' : 'Embedded Windows player (experimental)' };
+    }
     const managedItems = (game.drives.mediaSets || []).flatMap(set => set.items);
     let preparedMediaSets = game.drives.mediaSets;
     if (managedItems.length > 0) {
@@ -333,6 +354,19 @@ export class EmulatorLauncher {
   public static async diagnoseGame(game: GameProfile, prefs: AppPreferences): Promise<DiagnosticItem[]> {
     if (!this.isTauriEnvironment()) return [];
     const emuType = game.settings.emulatorType || prefs.activeEmulator;
+    if (emuType === 'boxedwine') {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const installed = await invoke<boolean>('embedded_runtime_status');
+      const results: DiagnosticItem[] = [{ id: 'windows-runtime', status: installed ? 'ok' : 'error', label: 'Embedded Windows engine',
+        message: installed ? 'BoxedWine 26R1 is installed.' : 'Open Configuration → Install Windows engine.' }];
+      try {
+        await invoke('prepare_windows_game', { gameDir: game.drives.cDrivePath, workingDir: game.workingDir || '', executable: game.executable });
+        results.push({ id: 'executable', status: 'ok', label: 'Windows executable', message: game.executable });
+      } catch (error) {
+        results.push({ id: 'executable', status: 'error', label: 'Windows executable', message: String(error) });
+      }
+      return results;
+    }
     const binaryPath = emuType === 'dosbox-staging'
       ? prefs.dosboxStagingPath
       : emuType === 'dosbox-x'

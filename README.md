@@ -29,6 +29,38 @@
 - **🎮 ScummVM Games:** Adventure titles that run on ScummVM instead of DOSBox are detected and launched too, including GOG's macOS releases, which carry their own engine.
 - **🦀 Rust & Tauri v2 Core:** Instant application boot, near-zero RAM footprint, and 100% native execution on Apple Silicon (M1/M2/M3/M4) and Intel Macs.
 
+### Experimental: Windows games inside GameSky
+
+The next version includes an embedded **BoxedWine** player for 32-bit Windows
+games such as East Drive. The game renders inside the existing GameSky window;
+no CrossOver, system Wine installation, Windows licence or Rosetta is required.
+
+Choose **Add Game → Import game ZIP automatically** to unpack an archive, detect
+its executable, and prepare the needed engine. Folder imports also detect Windows
+PE executables. Missing Windows support downloads automatically when importing or
+launching the game (approximately 120 MB, once per installation).
+The optional runtime can also be installed in Configuration. GameSky verifies its SHA-256 checksums before
+installing it. Import the game's folder or unpack its ZIP through Library Folder;
+Detection uses executable contents rather than ZIP filenames or version hashes.
+Known game profiles add compatible settings; unrecognised Windows games use the
+generic player without game-specific switches. East Drive switches are selected
+from capabilities advertised by its executable, including older builds.
+Automatic detection does not imply compatibility with every Windows game. **Save & close** returns to the
+library, and modified guest files persist separately for each game.
+
+This integration is experimental. Rendering, controls, audio, save/reload and
+frame rate must be tested on the target Mac before a public release. The runtime
+supports 2D DirectDraw; it does not provide hardware-accelerated Direct3D.
+The Windows layer uses Wine 11. East Drive’s client area fills the player without the emulated desktop or window frame,
+with its aspect ratio preserved as the GameSky window resizes.
+The default engine is the single-threaded JIT from upstream build 128, pinned to
+commit `fe428d02abb494229a46d5121d2f856b3f7371a6`. Compatibility mode retains
+the 26R1 interpreter. Guest files and Save Vault checkpoints use a per-game
+`state.sav` ZIP snapshot in the app's `windows-saves` directory.
+Source and licences: [BoxedWine](https://github.com/danoon2/Boxedwine/tree/fe428d02abb494229a46d5121d2f856b3f7371a6)
+(GPL-2.0-or-later), [Wine](https://gitlab.winehq.org/wine/wine/-/tree/wine-11.0)
+(LGPL-2.1-or-later). Game files are imported locally and are not bundled.
+
 ### Optional: unpacking Windows installers
 
 GOG's **macOS** releases (`.pkg`) and ZIP archives unpack out of the box, with
