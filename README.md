@@ -1,165 +1,187 @@
-# 🕹️ GameSky.space
+# GameSky.space 1.2.0
 
-[![macOS](https://img.shields.io/badge/Platform-macOS%2011.0%2B%20(Apple%20Silicon%20%26%20Intel)-000000.svg?style=flat-square&logo=apple)](https://gamesky.space)
-[![Tauri](https://img.shields.io/badge/Engine-Tauri%20v2%20%2B%20Rust-orange.svg?style=flat-square&logo=tauri)](https://tauri.app)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-FFDD00.svg?style=flat-square&logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/mariantomay)
+GameSky.space is a free, open-source macOS game library and launcher for DOS games,
+ScummVM adventures, and selected older 32-bit Windows 95/98 games. It manages
+launch profiles, game imports, disc media, artwork, and save-file backups.
 
-> **Modern retro gaming workstation and simple DOSBox manager engineered specifically for macOS.**  
-> 100% direct 1-click launch, intelligent Virtual Drive Bay, authentic Sound Blaster 16 & Roland MT-32 synthesis, and bulletproof save state protection — zero terminal required.
+**[Download the signed Universal DMG](https://game-sky-space.b-cdn.net/gamesky.space/releases/GameSky.space_1.2.0_universal.dmg)** ·
+[Website](https://gamesky.space/) · [Release notes](RELEASE-NOTES-1.2.0.md)
 
----
+One installer contains both **Apple Silicon (arm64) and Intel (x86_64)** builds.
+The app targets macOS 11 or later. Embedded Windows compatibility also depends
+on the WebKit features available on the target Mac.
 
-![GameSky.space macOS App Screenshot](https://gamesky.space/app-screenshot.png)
+![GameSky.space on macOS](https://gamesky.space/app-screenshot.png)
 
----
+## Supported engines
 
-## 🌟 Key Features
+| Engine | What GameSky supports | Setup |
+| --- | --- | --- |
+| [DOSBox](https://www.dosbox.com/) | Classic DOS games, generated launch configurations, mounted game folders and media | Detect or select an installed DOSBox executable |
+| [DOSBox Staging](https://dosbox-staging.github.io/) | DOS game profiles using the Staging engine | Detect or select an installed Staging executable |
+| [DOSBox-X](https://dosbox-x.com/) | DOS game profiles using DOSBox-X | Detect or select an installed DOSBox-X executable |
+| [ScummVM](https://www.scummvm.org/) | Detect and launch supported adventure-game data, including compatible GOG packages | Use a configured installation or a compatible ScummVM engine included in the game package |
+| [BoxedWine](https://www.boxedwine.org/) | Embedded WebAssembly player for selected 32-bit x86 Windows games | Downloaded and verified automatically when needed |
+| [Wine 11](https://www.winehq.org/) | Windows compatibility layer running inside BoxedWine | Included in the optional Windows runtime; no system Wine installation required |
 
-- **⚡ 1-Click Direct Launch (Zero Terminal):** Say goodbye to manually typing `mount c ~/games/...` and wrestling with arcane EMS/XMS command-line parameters. Double-click and play with automated environment initialization.
-- **💿 Virtual Drive Bay:** Instant mounting for ISO, CUE/BIN, DMG, IMG floppies, and local macOS folders as virtual DOS drives `C:\` and `D:\`. Multi-disc swap support without touching a configuration file.
-- **🎛️ Complete Sound Hardware Subsystem:**
-  - Yamaha OPL3 FM synthesis (Sound Blaster 16 & Pro)
-  - Gravis UltraSound (GUS) hardware emulation
-  - Roland MT-32 / General MIDI bridge via macOS CoreAudio
-  - PC Speaker simulation
-- **🔒 Save Vault & Sandbox Checkpoints:** Recursive folder scanning and isolated backups prevent your hard-earned progress and game saves from being overwritten during reinstalls.
-- **📺 VGA Scaler Engine:** Built-in presets for `normal2x`, `normal3x`, `advmame2x`, `hq2x`, and 4:3 aspect-ratio correction optimized for high-DPI Retina and UltraWide displays.
-- **🌐 FreeDOS 1.4 Catalog:** 35 legal, license-verified open-source packages with automated CRC32 checksum verification.
-- **🎮 ScummVM Games:** Adventure titles that run on ScummVM instead of DOSBox are detected and launched too, including GOG's macOS releases, which carry their own engine.
-- **🦀 Rust & Tauri v2 Core:** Instant application boot, near-zero RAM footprint, and 100% native execution on Apple Silicon (M1/M2/M3/M4) and Intel Macs.
+DOSBox settings apply to the selected DOS engine. ScummVM and Windows games use
+separate launch paths; DOS CPU cycles, DOS sound-card settings, and DOS controller
+profiles do not configure the embedded Windows player.
 
-### Experimental: Windows games inside GameSky
+## New in 1.2.0: Windows games and East Drive
 
-The next version includes an embedded **BoxedWine** player for 32-bit Windows
-games such as East Drive. The game renders inside the existing GameSky window;
-no CrossOver, system Wine installation, Windows licence or Rosetta is required.
+- **Play inside GameSky:** the Windows player renders in the existing application
+  window, without a separate Wine window.
+- **East Drive support:** its game image fills the player area, preserves its
+  aspect ratio, and resizes with the window.
+- **Automatic ZIP import:** choose **Add Game → Import game ZIP automatically**.
+  GameSky extracts the archive into a new folder, detects the executable, creates
+  a profile, and prepares missing Windows support. Existing installations are
+  not overwritten by this import flow.
+- **Automatic engine preparation:** the first Windows import or launch downloads
+  approximately 120 MB of optional runtime files and checks their SHA-256 hashes.
+  Initial setup requires internet access. The engine can also be installed in
+  Configuration, and a failed download can be retried by launching the game again.
+- **Detection beyond a single archive or version:** Windows executables are
+  recognised by their PE headers rather than archive filenames. Known games can
+  use dedicated profiles; other titles use the generic player. The East Drive
+  profile passes only switches advertised by that executable.
+- **Persistent guest files:** changed files are stored separately for each game.
+  **Save & close** writes them and returns to the library. Save Vault can back up
+  the resulting per-game `state.sav` file.
 
-Choose **Add Game → Import game ZIP automatically** to unpack an archive, detect
-its executable, and prepare the needed engine. Folder imports also detect Windows
-PE executables. Missing Windows support downloads automatically when importing or
-launching the game (approximately 120 MB, once per installation).
-The optional runtime can also be installed in Configuration. GameSky verifies its SHA-256 checksums before
-installing it. Import the game's folder or unpack its ZIP through Library Folder;
-Detection uses executable contents rather than ZIP filenames or version hashes.
-Known game profiles add compatible settings; unrecognised Windows games use the
-generic player without game-specific switches. East Drive switches are selected
-from capabilities advertised by its executable, including older builds.
-Automatic detection does not imply compatibility with every Windows game. **Save & close** returns to the
-library, and modified guest files persist separately for each game.
+East Drive is a retro racing game by Sledge. Download its game files separately:
+[author's game page](https://sledgehv.itch.io/east-drive),
+[high-voltage.cz](https://www.high-voltage.cz/), and
+[the article about creating the game](https://www.high-voltage.cz/neretro/s-ai-muze-hry-delat-kazdy-a-tak-jsem-jednu-udelal/).
+Game files are **not bundled** with GameSky.
 
-This integration is experimental. Rendering, controls, audio, save/reload and
-frame rate must be tested on the target Mac before a public release. The runtime
-supports 2D DirectDraw; it does not provide hardware-accelerated Direct3D.
-The Windows layer uses Wine 11. East Drive’s client area fills the player without the emulated desktop or window frame,
-with its aspect ratio preserved as the GameSky window resizes.
-The default engine is the single-threaded JIT from upstream build 128, pinned to
-commit `fe428d02abb494229a46d5121d2f856b3f7371a6`. Compatibility mode retains
-the 26R1 interpreter. Guest files and Save Vault checkpoints use a per-game
-`state.sav` ZIP snapshot in the app's `windows-saves` directory.
-Source and licences: [BoxedWine](https://github.com/danoon2/Boxedwine/tree/fe428d02abb494229a46d5121d2f856b3f7371a6)
-(GPL-2.0-or-later), [Wine](https://gitlab.winehq.org/wine/wine/-/tree/wine-11.0)
-(LGPL-2.1-or-later). Game files are imported locally and are not bundled.
+### Windows compatibility limits
 
-### Optional: unpacking Windows installers
+Windows support is **experimental**. The current player supports **32-bit x86
+executables** and 2D DirectDraw rendering. It does not provide hardware-accelerated
+Direct3D, or support for 64-bit and ARM Windows executables. Recognising an EXE
+or importing a ZIP does not guarantee that the game will run.
 
-GOG's **macOS** releases (`.pkg`) and ZIP archives unpack out of the box, with
-no extra tools — that includes both the DOSBox-wrapped and ScummVM builds.
+East Drive 0.9 beta 26 menus, driving, embedded display, clean runtime installation,
+and Save & close were tested on the development Mac; gameplay was also confirmed
+by the user. Other game versions, titles, macOS versions, and Intel hardware need
+separate compatibility testing. There is no hard-coded requirement for that
+specific East Drive release, but future builds can introduce new dependencies.
 
-Unpacking **Inno Setup installers** — the format GOG and OldGames.sk use for
-their **Windows** builds, and the only download some games offer — needs
-`innoextract`, which is not bundled:
+The player uses the upstream single-threaded BoxedWine JIT from build 128, pinned
+to commit `fe428d02abb494229a46d5121d2f856b3f7371a6`, with Wine 11. Compatibility
+mode offers the 26R1 interpreter. No CrossOver, Windows installation, or Rosetta
+is required for this embedded runtime.
+
+## Game imports and library management
+
+| Input | Support |
+| --- | --- |
+| Local game folder | Inspect DOS/Windows executables and detect compatible ScummVM data |
+| ZIP archive | Built-in extraction, including archives using Windows path separators; automatic import available |
+| GOG macOS `.pkg` | Extract supported package payloads, read available game metadata, and locate DOSBox or ScummVM game data |
+| Windows Inno Setup installer | Detect installer signature; extraction requires external `innoextract` |
+| 7z / RAR archive | Extraction requires a supported external unpacking tool, such as `sevenzip` |
+| CD-ROM or floppy media | Select images or mounted folders and configure media through the chosen DOS engine |
+
+**LIB** shows installed games, ScummVM folders, archives, empty folders, and sizes.
+It offers extraction, adding games, and visibility controls. **LAUNCH FILE** lets
+you correct an automatically chosen executable. Games can have custom artwork,
+favourites, recently played entries, play counts, and tracked play time.
+
+For optional archive tools:
 
 ```bash
-brew install innoextract     # GOG / OldGames.sk installers
-brew install sevenzip        # optional, for 7z and RAR archives
+brew install innoextract
+brew install sevenzip
 ```
 
-The Library Folder view says so when a tool is missing, rather than failing at
-unpack time.
+GameSky reports missing extraction tools. Supported disc-image formats and
+mounting behaviour depend on the DOSBox variant; a detected image is not a
+promise that every engine supports that format.
 
----
+## DOS configuration, media, sound, and controls
 
-## 🤝 Community & Development Support Welcome!
+- Automatic compatibility presets and conservative settings based on game
+  metadata, with manual overrides.
+- CPU cycles, memory, graphics machine, aspect correction, fullscreen, and
+  scaler settings, including Normal2x/3x, AdvMAME2x, and HQ2x.
+- Sound Blaster device, port, IRQ, DMA, and MIDI configuration passed to DOSBox;
+  actual synthesis and device support are supplied by the selected engine.
+- CD-ROM and floppy mounting, local folders, and multi-disc media sets with
+  swapping or separate drive assignments.
+- Per-game keyboard/joystick templates for platformers, FPS games, adventures,
+  racing games, and native joystick input; mapper files and dead-zone options.
+- Setup-program selection, launch diagnostics, repair actions, and optional
+  Norton Commander integration.
 
-**GameSky.space** is built as an open-source tool for retro computing enthusiasts on Mac. **We warmly welcome contributions, testing, and feedback from the community!**
+## Saves, downloads, and appearance
 
-### How You Can Help:
-1. 🐛 **Report Issues & Feature Requests:** Open a [GitHub Issue](https://github.com/bradacz/gamesky.space/issues) to report bugs, suggest enhancements, or propose new emulator features.
-2. 🎮 **Game Profile Compatibility:** Test your favorite DOS classics and share optimal CPU cycles and sound configurations.
-3. 💻 **Pull Requests:** Contributions to the React frontend, Tauri/Rust backend, sound engines, or documentation are very welcome!
-4. ☕ **Support the Developer:** If you enjoy GameSky.space, consider buying the creator a coffee at [Buy Me A Coffee](https://www.buymeacoffee.com/mariantomay).
+- **Save Vault:** scan save files, create named checkpoints, restore them, and
+  open their location in Finder. Checkpoints back up files; they are **not
+  snapshots of running emulator memory**.
+- Export/import library backups and duplicate game profiles.
+- A FreeDOS 1.4 catalogue with 35 open-source packages and checksum verification;
+  additional catalogue entries use their source's available downloads.
+- Custom artwork, Apple Light, classic Win95, Norton Commander, and DOS-style
+  themes, optional UI sound effects, and app fullscreen.
+- Signed Universal DMG releases, Apple notarization, and signed automatic
+  updates distributed through Bunny.net.
 
----
+## Development
 
-## 🚀 Development Setup
-
-### Prerequisites
-- Node.js 18+ and `npm`
-- Rust 1.75+ and `cargo`
-- macOS 11.0+ (Big Sur, Monterey, Ventura, Sonoma, Sequoia)
-
-### Installation & Quick Start
+The app uses Tauri 2, Rust, and TypeScript/Vite. The CI configuration uses Node.js
+22 and the stable Rust toolchain. macOS release builds also need Xcode command-line
+tools, both Rust target architectures, and the signing credentials described in
+[RELEASE.md](RELEASE.md).
 
 ```bash
-# 1. Clone the repository
 git clone https://github.com/bradacz/gamesky.space.git
 cd gamesky.space
-
-# 2. Install dependencies
 npm install
-
-# 3. Start the web frontend in development mode
-npm run dev
-
-# 4. Launch the full native macOS application (Tauri v2 + Rust)
 npm run tauri dev
 ```
 
----
-
-## 🛠️ Build & Verification
+`npm run dev` starts the browser-only interface at `/app.html`; native file import,
+engine installation, and game launching require the Tauri desktop application.
+The public download website has a separate source repository:
+[gamasky-space-web](https://github.com/bradacz/gamasky-space-web), deployed through
+GitHub to Cloudflare Pages.
 
 ```bash
-# Verify TypeScript types and bundle frontend assets
 npm run build
-
-# Run Rust backend test suite
 cargo test --manifest-path src-tauri/Cargo.toml
-
-# Run Rust clippy linter with strict checks
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ```
 
----
-
-## 📦 Signed macOS Distribution & Auto-Updater Deployment
-
-GameSky.space includes an automated release pipeline for Apple Developer ID code signing, Apple Notarization, Minisign updater signing, and automated deployment to Bunny.net CDN:
+The real-archive import test can be run with a local copy of East Drive:
 
 ```bash
-# 1. Generate updater keys (run once)
-npm run release:keys
-
-# 2. Build signed & notarized macOS DMG locally
-npm run release:macos
-
-# 3. Deploy DMG, updater archives and latest.json to Bunny.net CDN
-npm run release:bunny
-
-# 4. Full All-in-One Release & Deploy
-npm run release:deploy
+GAMESKY_TEST_EAST_DRIVE_ARCHIVE=/path/to/east-drive.zip \
+  cargo test --manifest-path src-tauri/Cargo.toml imports_real_east_drive_archive -- --ignored
 ```
 
-For detailed setup, environment variables, and step-by-step instructions, see **[RELEASE.md](RELEASE.md)**.
+Release commands:
 
----
+```bash
+npm run release:macos   # Build, sign, notarize, and verify the Universal installer
+npm run release:bunny   # Publish verified artifacts and updater metadata
+```
 
-## 📄 License & Legal Notice
+See [RELEASE.md](RELEASE.md) for the release workflow. Signing credentials and
+private keys belong in ignored local files, never in Git.
 
-This project is licensed under the **[MIT License](LICENSE)**.  
-The underlying emulation runtime interfaces with open-source binaries and configurations from **DOSBox**, **DOSBox-Staging**, and **DOSBox-X** (licensed under GNU GPLv2). All original game titles, cover artwork, and trademarks belong to their respective copyright holders.
+## Contributing and licences
 
----
+Report compatibility results and bugs in
+[GitHub Issues](https://github.com/bradacz/gamesky.space/issues), join the
+[discussion](https://github.com/bradacz/gamesky.space/discussions/1), or
+[support development](https://www.buymeacoffee.com/mariantomay).
 
-© 1995–2026 **GameSky.space** · Engineered with ❤️ in Rust & React for macOS.
+GameSky source is released under the [MIT licence](LICENSE). DOSBox variants,
+ScummVM, BoxedWine, and Wine retain their own licences. In particular,
+[BoxedWine source](https://github.com/danoon2/Boxedwine/tree/fe428d02abb494229a46d5121d2f856b3f7371a6)
+is GPL-2.0-or-later and
+[Wine 11 source](https://gitlab.winehq.org/wine/wine/-/tree/wine-11.0)
+is LGPL-2.1-or-later. Game files, artwork, and trademarks belong to their owners.
